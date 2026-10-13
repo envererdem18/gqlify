@@ -255,6 +255,12 @@ sealed class SelectionType {
 
   /// Fragment interfaces (and, for variants, nothing else) implemented.
   final List<String> implements = [];
+
+  /// Canonical emission order within a library: the index of the definition
+  /// (operation or fragment) in its document, then creation order while
+  /// building that definition. Independent of other documents.
+  int group = 0;
+  int seq = 0;
 }
 
 /// A concrete, decodable response class.
@@ -350,6 +356,10 @@ final class LibraryModel {
 
   /// Other generated libraries referenced by this one (output paths).
   final Set<String> imports = {};
+
+  /// Source documents (besides the schema and configuration, which every
+  /// library depends on) whose content can affect this library.
+  final Set<String> dependencies = {};
 
   /// Extra imports for custom scalars.
   final Set<String> scalarImports = {};

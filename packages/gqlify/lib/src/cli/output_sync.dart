@@ -74,16 +74,36 @@ final class OutputPlan {
 
   /// Writes created/changed outputs and deletes stale ones. Unchanged files
   /// are not touched, so file watchers do not see spurious changes.
-  void apply(Project project, Map<String, String> outputs) {
+  void apply(
+    Project project,
+    Map<String, String> outputs, {
+    OutputIO io = const OutputIO(),
+  }) {
     for (final path in [...created, ...changed]) {
-      writeAtomically(project.absolute(path), outputs[path]!);
+      io.write(project.absolute(path), outputs[path]!);
     }
     for (final path in stale) {
-      final file = File(project.absolute(path));
-      if (file.existsSync()) file.deleteSync();
+      io.delete(project.absolute(path));
     }
   }
 }
+
+/// File operations used to apply outputs; replaceable in tests to inject
+/// failures (interrupted writes, full disks).
+class OutputIO {
+  const OutputIO();
+
+  void write(String path, String content) => writeAtomically(path, content);
+
+  void delete(String path) {
+    final file = File(path);
+    if (file.existsSync()) file.deleteSync();
+  }
+}
+
+/// Suffix of temporary files created by [writeAtomically]. Leftovers from a
+/// killed process are removed by the next run.
+const tempSuffix = '.gqlify-tmp';
 
 /// Writes [content] to a temporary sibling file and renames it over [path],
 /// so readers never observe a partially written library.
@@ -91,7 +111,7 @@ void writeAtomically(String path, String content) {
   final target = File(path);
   target.parent.createSync(recursive: true);
   final temp = File(
-    p.join(target.parent.path, '.${p.basename(path)}.$pid.gqlify-tmp'),
+    p.join(target.parent.path, '.${p.basename(path)}.$pid$tempSuffix'),
   );
   try {
     temp.writeAsBytesSync(utf8.encode(content), flush: true);

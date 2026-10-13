@@ -8,5 +8,6 @@ export 'src/config.dart'
     show GqlifyConfig, GenerationMode, ScalarConfig, ScalarJsonType;
 export 'src/diagnostics.dart' show Diagnostic, DiagnosticSink, Severity;
 export 'src/emit/formatter.dart' show FormatSettings;
-export 'src/engine.dart' show GenerationInput, GenerationResult, GqlifyEngine;
+export 'src/engine.dart'
+    show FormatMemo, GenerationInput, GenerationResult, GqlifyEngine;
 export 'src/source.dart' show GqlifySource, normalizePath;

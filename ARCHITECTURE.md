@@ -1,7 +1,7 @@
 # gqlify architecture
 
 This document records how gqlify is structured and why. It is updated as each
-milestone lands. **Current state: Milestone B (semantic coverage and modes).**
+milestone lands. **Current state: Milestone C (correctness-first CLI caching).**
 
 ## Packages
 
@@ -382,24 +382,160 @@ Remaining risk: the formatter bundled with the SDK can differ from the
 
 ## CLI adapter
 
-- `gqlify generate`
+- `gqlify generate [--clean] [--explain]`
   - Writes only files whose bytes changed, each through a temporary file and
     a rename.
   - Deletes stale outputs.
   - Refuses to overwrite files it did not generate.
-- `gqlify check`
-  - Writes nothing.
+- `gqlify check [--clean] [--explain]`
+  - Writes nothing: no outputs and no cache files.
   - Fails on errors or on missing, outdated, stale or conflicting outputs.
+- `gqlify cache verify` and `gqlify cache clear`
+  - Act on the CLI cache only, never on `.dart_tool/build/` and never on
+    generated files.
 - `--reporter json`
-  - Prints one JSON object with the command, success, diagnostics (severity,
-    code, message, path, line, column), affected files by category, and
-    elapsed time.
+  - Prints one JSON object: command, success, diagnostics, affected files by
+    category, cache status, and with `--explain` per-output reasons and
+    per-phase timings.
 - **Ownership without a cache:** a file is a gqlify output if its name ends
   in `.graphql.dart`/`.gql.dart`/`.json.dart` and it starts with the
-  generated-code marker.
+  generated-code marker. Stale outputs are found even with no cache at all.
 
-Not yet implemented (Milestone C): the `.dart_tool/gqlify/` cache, locking,
-`--clean`, `--explain`, `cache verify` and `cache clear`.
+## Incremental caching (CLI)
+
+**Invariant:** `GeneratedFiles(incremental) == GeneratedFiles(clean)`, for the
+whole mapping of output paths to bytes, including removed files, plus
+identical diagnostics and exit codes.
+
+The cache is an optimization only. It lives in `.dart_tool/gqlify/`
+(`cache/cache_store.dart`) and may be deleted at any time:
+
+```text
+.dart_tool/gqlify/
+  manifest.json                 last successful run
+  artifacts/<generator>/<key>   memoized formatter output
+  tmp/                          files being written
+  lock                          inter-process lock
+```
+
+### What is cached, and why that is safe
+
+1. **Warm hit (nothing to do).**
+   - **The input key.** A run hashes, with SHA-256:
+     - the cache format version
+     - the generator fingerprint
+     - the raw `gqlify.yaml`
+     - the format settings (from `pubspec.yaml` and `analysis_options.yaml`)
+     - every schema file and every discovered document, path plus content
+   - **Conditions for a hit.** The input key must equal the manifest's, every
+     recorded output must exist with its recorded digest, and no other
+     gqlify-owned file may exist.
+   - **On a hit**, the engine is skipped entirely and the recorded
+     diagnostics (warnings) are replayed. Equal input keys mean equal engine
+     input, and the engine is a pure function, so this is the clean result.
+   - **On any doubt** (missing, corrupt or incompatible manifest, a missing
+     or modified output, an unexpected generated file), the run falls back
+     to the next step and reports why.
+2. **Everything else.**
+   - The engine runs **in full**: schema loading, parsing and validation of
+     every document, IR building and emission. A cache therefore can never
+     hide a new error.
+   - **Only formatting is memoized** (`FormatMemo`). It is by far the most
+     expensive phase (more than 80% of engine time in the `--explain`
+     timings of the example package; Milestone E will benchmark properly).
+     Formatting is a pure function of the unformatted source and the format
+     settings. The memo key is the SHA-256 of exactly that input, and
+     artifacts are namespaced by the generator fingerprint, which covers the
+     `dart_style` version. A memo hit is therefore the formatter's output for
+     that exact input and can never be stale.
+   - **Self-verifying artifacts.** Each artifact stores
+     `<sha256 of content>\n<content>`, so truncated or corrupted artifacts
+     are detected and ignored.
+
+### Why the dependency graph is not part of invalidation
+
+The engine reports, per output, which documents can affect it
+(`GenerationResult.dependencies`):
+
+- **A document library** depends on its own document and on the documents
+  of all transitively spread fragments.
+- **The schema library**, in operations mode, depends on every document,
+  because it holds the enums and inputs that operations use.
+
+gqlify uses this graph for **explanations** (`--explain`), not to skip
+work. Invalidation is content-addressed, so a missing edge in the graph
+cannot produce stale output. A graph-based skip would save only IR building
+and emission, which are cheap next to formatting and validation. Validation
+must stay global anyway, because a schema change can invalidate any
+document. Graph-based skipping of IR/emission is a possible later
+optimization; it would need differential tests proving it equivalent.
+
+To make the graph exact, emission order inside a library is canonical:
+definition index in the document, then creation order. Without this, the
+order would depend on which document first triggered a fragment, so editing
+one document could reorder another file.
+
+### Generator fingerprint
+
+The fingerprint (`cache/fingerprint.dart`) is the SHA-256 of:
+
+- the complete source of `package:gqlify` (not just its version, so local
+  development edits invalidate caches)
+- the resolved versions and locations of `gql`, `dart_style` and `analyzer`
+- the Dart SDK version
+
+If it cannot be determined, for example in an AOT build without package
+resolution, caching is disabled and reported as such. This is never a
+silent hit.
+
+### Crash safety and concurrency
+
+- **Write ordering.** The manifest is deleted *before* outputs change. It is
+  written atomically (temporary file plus rename), *after* every output has
+  been written and re-read with a matching digest. A manifest therefore
+  always describes a complete, verified state.
+- **Interruption.** If a run dies midway, the next run sees no manifest, or
+  an old one whose key or output digests do not match, and recomputes.
+- **Leftover temporary files.** `.<name>.<pid>.gqlify-tmp` files from killed
+  processes are deleted by the next run.
+- **Failed runs** (invalid inputs, write errors, a full disk, read-only
+  directories) never write a manifest. Errors are reported as `write-failed`
+  with the OS error, and the next successful run repairs partially updated
+  outputs.
+- **Locking.** `generate` and `cache clear` take an exclusive OS file lock;
+  `check` and `cache verify` take a shared one.
+  - The OS releases the lock when a process exits or crashes, so stale locks
+    cannot occur.
+  - Waiting is announced on stderr, and `--lock-timeout` bounds it (default
+    120 s).
+  - Limitation: OS locks exclude processes, not isolates of one process.
+- **Manually edited outputs** are detected by digest and regenerated. Files
+  without the generated-code marker are never overwritten
+  (`output-conflict`).
+- **Durability.** Files are flushed before the rename. Directory entries are
+  not fsynced, because Dart has no API for it. After a power loss a rename
+  may be lost; the next run then detects missing or old outputs by digest.
+
+### `--explain`
+
+For every output, `--explain` reports:
+
+- **Status:** `created`, `updated`, `unchanged`, `removed` or `conflict`.
+- **Reasons**, for example:
+  - `no previous cache`
+  - `cache ignored: generator changed`
+  - `configuration changed`
+  - `format settings changed`
+  - `schema changed`
+  - `document changed`
+  - `transitive fragment document changed: lib/…`
+  - `new output`
+  - `output modified on disk`
+  - `no longer generated …`
+- **Formatting:** whether it was reused from the cache.
+
+It also prints the cache status (hit, or miss with its cause) and timings per
+phase (discovery, hashing, scan, engine phases, write, verify, cache).
 
 ## Testing
 
@@ -411,6 +547,36 @@ Not yet implemented (Milestone C): the `.dart_tool/gqlify/` cache, locking,
 - **Introspection:** introspection ≡ SDL equivalence, and malformed input.
 - **CLI integration:** no-op runs, `check`, stale removal, conflicts, mode
   switches, the JSON reporter, and warnings.
+- **Differential cache tests** (`cache_*_test.dart`, tag `differential`):
+  after every step, the incremental tree in one sandbox is compared with a
+  clean generation in a fresh copy of the sources: exit code, diagnostics,
+  and the full path → bytes mapping. Failed runs must leave files unchanged.
+  - **Scenarios.** They cover cold, warm and single-operation changes, plus:
+    - fragments: shared, nested or transitive, moved, renamed (dangling),
+      cycles, invalid spreads, deleted
+    - schema: field added, removed or renamed, nullability, enums, inputs,
+      a type renamed, a swap to introspection JSON
+    - configuration: mode switches, client name, scalar mapping, format
+      settings, a moved schema (output location), narrowed document globs
+    - failures: duplicate operations, invalid variables, syntax errors
+    - disturbed state: deleted or edited outputs, a truncated or garbage
+      manifest, format and generator mismatches, corrupt artifacts, an
+      unexpected generated file, a deleted cache, `--clean`
+    - reproducible ordering
+  - **Failure injection:** an interrupted multi-file write, a full disk,
+    leftover temporary files, a read-only directory.
+  - **Concurrency (separate processes):** two simultaneous `generate` runs,
+    a lock held by a process killed with SIGKILL, waiting for a running
+    process.
+  - **Property-based fuzzing:** seeded random edit sequences on a synthetic
+    project, mixed with cache and output disturbances and `--clean`, check
+    the invariant after every step and require a warm hit when re-run
+    unchanged. By default 4 seeds × 14 steps run;
+    `GQLIFY_FUZZ_SEEDS=1-200` runs more. 40 seeds (560 steps) passed locally.
+  - **Large fixture:** 240 operations, 40 fragments and 40 documents (cold,
+    warm, shared fragment change, schema change).
+  - **Harness self-test:** a deliberately lying cache (a tampered output
+    with a consistent manifest) must be caught by the comparison.
 - **Golden fixtures** (`packages/gqlify/test/fixtures/*`): committed outputs
   are regenerated and compared byte for byte. Root `dart analyze`
   (`strict-casts`, `strict-inference`, `strict-raw-types`) covers them, which
@@ -430,7 +596,7 @@ Not yet implemented (Milestone C): the `.dart_tool/gqlify/` cache, locking,
 - **`example/`:** the generated API is used like an application would use
   it, and its outputs are checked for freshness.
 
-## Known limitations (after Milestone B)
+## Known limitations (after Milestone C)
 
 - **Subscriptions:** not supported (`unsupported-subscription`).
 - **Unknown enum values:** `$unknown` cannot be encoded, so a response
@@ -441,5 +607,12 @@ Not yet implemented (Milestone C): the `.dart_tool/gqlify/` cache, locking,
   interface or union types (see Modes).
 - **Introspection diagnostics:** errors in an introspection schema have no
   line and column information.
-- **Not yet built:** the CLI cache (Milestone C) and the `build_runner`
-  builder (Milestone D).
+- **Output scan cost:** the ownership scan walks the whole package (except
+  `build/`, `.dart_tool/` and hidden directories) on every run, so that
+  stale outputs are found even without a cache. This may be slow in very
+  large repositories; Milestone E will measure it.
+- **Artifact pruning:** formatting artifacts are pruned to those of the last
+  successful run, so undoing an edit reformats once.
+- **Unverified on this machine:** Windows file locking and path handling are
+  covered by CI only.
+- **Not yet built:** the `build_runner` builder (Milestone D).

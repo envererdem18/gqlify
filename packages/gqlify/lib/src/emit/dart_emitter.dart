@@ -23,7 +23,9 @@ final class _LibraryEmitter {
     library.enums.forEach(_enum);
     library.inputs.forEach(_input);
     library.operations.forEach(_operation);
-    for (final selection in library.selections) {
+    final selections = [...library.selections]
+      ..sort((a, b) => a.group != b.group ? a.group - b.group : a.seq - b.seq);
+    for (final selection in selections) {
       switch (selection) {
         case FragmentInterface():
           _interface(selection);

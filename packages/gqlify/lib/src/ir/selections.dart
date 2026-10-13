@@ -82,12 +82,15 @@ bool _sameOccurrences(List<_Occurrence> a, List<_Occurrence> b) {
 /// A fragment interface (or a nested interface of one) that a selection may
 /// have to implement.
 final class InterfaceInfo {
-  InterfaceInfo(this.name, this.library);
+  InterfaceInfo(this.name, this.library, this.source);
 
   final String name;
 
   /// Output path of the library declaring it.
   final String library;
+
+  /// Source document defining the fragment.
+  final String source;
 
   /// Narrower interfaces for specific runtime types (polymorphic fragments).
   final Map<String, InterfaceInfo> variants = {};
@@ -116,7 +119,8 @@ final class SelectionBuilder {
   final Map<String, ast.FragmentDefinitionNode> fragments;
 
   /// Library output path and source path of each fragment.
-  final Map<String, ({String output, String source})> fragmentLibraries;
+  final Map<String, ({String output, String source, int index})>
+  fragmentLibraries;
   final LeafTypes leafTypes;
   final NamingRegistry names;
   final DiagnosticSink sink;
@@ -125,6 +129,18 @@ final class SelectionBuilder {
 
   /// Libraries by output path, created by the caller.
   final Map<String, LibraryModel> libraries = {};
+
+  /// Definition index (in its document) of the definition being built; see
+  /// [SelectionType.group].
+  int group = 0;
+  int _seq = 0;
+
+  void _add(String library, SelectionType type, {int? seq}) {
+    type
+      ..group = group
+      ..seq = seq ?? _seq++;
+    _library(library).selections.add(type);
+  }
 
   // ---------------------------------------------------------------------------
   // Collection
@@ -225,6 +241,8 @@ final class SelectionBuilder {
     final fragment = fragments[name]!;
     final location = fragmentLibraries[name]!;
     final type = schema[fragment.typeCondition.on.name.value]!;
+    final outerGroup = group;
+    group = location.index;
     final info = _interface(
       dartName: escapeType(pascalCase(name)),
       static: type,
@@ -236,6 +254,7 @@ final class SelectionBuilder {
       path: location.source,
       description: 'Fragment `$name` on `${type.name}`.',
     );
+    group = outerGroup;
     _fragmentInfos[name] = info;
     return info;
   }
@@ -253,7 +272,7 @@ final class SelectionBuilder {
   }) {
     names.claim(dartName, origin, path: path, at: at);
     final other = _collect(static, null, sets);
-    final info = InterfaceInfo(dartName, library);
+    final info = InterfaceInfo(dartName, library, path);
 
     final common = FragmentInterface(
       dartName,
@@ -281,7 +300,7 @@ final class SelectionBuilder {
         reuse: reuse,
       ),
     );
-    _library(library).selections.add(common);
+    _add(library, common);
 
     for (final MapEntry(key: type, value: collected) in _variants(
       static,
@@ -291,7 +310,7 @@ final class SelectionBuilder {
       final variantName = '$dartName\$${pascalCase(type)}';
       names.claim(variantName, origin, path: path, at: at);
       final variant = FragmentInterface(variantName, type, []);
-      final variantInfo = InterfaceInfo(variantName, library);
+      final variantInfo = InterfaceInfo(variantName, library, path);
       final variantRequired = [
         info, // Variants refine the common interface.
         for (final r in required) r.forType(type),
@@ -312,7 +331,7 @@ final class SelectionBuilder {
           reuse: reuse,
         ),
       );
-      _library(library).selections.add(variant);
+      _add(library, variant);
       info.variants[type] = variantInfo;
     }
     return info;
@@ -334,7 +353,6 @@ final class SelectionBuilder {
     required String path,
   }) {
     names.claim(dartName, origin, path: path, at: at);
-    final lib = _library(library);
     final other = _collect(static, null, sets);
     final variants = _variants(static, sets, other);
 
@@ -346,7 +364,7 @@ final class SelectionBuilder {
       ];
       final cls = SelectionClass(dartName, static.name, []);
       _implement(cls, caseRequired, library);
-      lib.selections.add(cls);
+      _add(library, cls);
       cls.fields.addAll(
         _fields(
           collected: other,
@@ -376,8 +394,8 @@ final class SelectionBuilder {
       [],
       superclass: dartName,
     );
-    final sealedIndex = lib.selections.length;
-    lib.selections.add(otherClass);
+    final sealedSeq = _seq++;
+    _add(library, otherClass);
     otherClass.fields.addAll(
       _fields(
         collected: other,
@@ -402,7 +420,7 @@ final class SelectionBuilder {
       ];
       final cls = SelectionClass(variantName, type, [], superclass: dartName);
       _implement(cls, caseRequired, library);
-      lib.selections.add(cls);
+      _add(library, cls);
       cls.fields.addAll(
         _fields(
           collected: collected,
@@ -440,7 +458,7 @@ final class SelectionBuilder {
       other: otherClass,
     );
     _implement(sealed, baseRequired, library);
-    lib.selections.insert(sealedIndex, sealed);
+    _add(library, sealed, seq: sealedSeq);
     return dartName;
   }
 

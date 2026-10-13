@@ -95,18 +95,22 @@ final class _ModelBuilder implements LeafTypes {
 
       final sorted = [...documents.documents]
         ..sort((a, b) => a.path.compareTo(b.path));
-      final fragmentLibraries = <String, ({String output, String source})>{};
+      final fragmentLibraries =
+          <String, ({String output, String source, int index})>{};
       for (final doc in sorted) {
         final library = LibraryModel(
           outputPath: '${doc.path}.dart',
           sourcePaths: [doc.path],
         )..imports.add(_schemaLibrary.outputPath);
         libraries[library.outputPath] = library;
-        for (final f in doc.fragments) {
-          fragmentLibraries[f.name.value] = (
-            output: library.outputPath,
-            source: doc.path,
-          );
+        for (final (index, def) in doc.node.definitions.indexed) {
+          if (def is ast.FragmentDefinitionNode) {
+            fragmentLibraries[def.name.value] = (
+              output: library.outputPath,
+              source: doc.path,
+              index: index,
+            );
+          }
         }
       }
       _selections = SelectionBuilder(
@@ -126,9 +130,22 @@ final class _ModelBuilder implements LeafTypes {
           _selections.fragmentInterface(fragment.name.value);
         }
         final library = libraries['${doc.path}.dart']!;
-        for (final op in doc.operations) {
-          final model = _operation(doc.path, library, op);
+        for (final (index, def) in doc.node.definitions.indexed) {
+          if (def is! ast.OperationDefinitionNode) continue;
+          _selections.group = index;
+          final model = _operation(doc.path, library, def);
           if (model != null) library.operations.add(model);
+        }
+      }
+    }
+
+    if (config.mode.includesOperations) {
+      for (final doc in documents.documents) {
+        libraries['${doc.path}.dart']!.dependencies.addAll(_dependencies(doc));
+        // Which enums and inputs the schema library contains depends on
+        // every document (operations mode only).
+        if (!config.mode.includesAllSchemaTypes) {
+          _schemaLibrary.dependencies.add(doc.path);
         }
       }
     }
@@ -417,6 +434,42 @@ final class _ModelBuilder implements LeafTypes {
       document: _document(op),
       clientName: config.clientName,
     );
+  }
+
+  /// Documents whose content can affect the library generated for [doc]:
+  /// [doc] itself and the documents of every fragment it transitively
+  /// spreads. Fragment content only reaches other definitions via spreads.
+  Set<String> _dependencies(ParsedDocument doc) {
+    final result = {doc.path};
+    final visited = <String>{};
+    void visit(ast.SelectionSetNode set) {
+      for (final selection in set.selections) {
+        switch (selection) {
+          case ast.FieldNode(:final selectionSet?):
+            visit(selectionSet);
+          case ast.InlineFragmentNode(:final selectionSet):
+            visit(selectionSet);
+          case ast.FragmentSpreadNode(:final name):
+            final fragment = documents.fragments[name.value]!;
+            result.add(fragment.path);
+            if (visited.add(name.value)) visit(fragment.node.selectionSet);
+          default:
+            break;
+        }
+      }
+    }
+
+    for (final def in doc.node.definitions) {
+      switch (def) {
+        case ast.OperationDefinitionNode(:final selectionSet):
+          visit(selectionSet);
+        case ast.FragmentDefinitionNode(:final selectionSet):
+          visit(selectionSet);
+        default:
+          break;
+      }
+    }
+    return result;
   }
 
   /// The operation followed by every fragment it transitively spreads,

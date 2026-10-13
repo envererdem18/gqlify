@@ -1,3 +1,18 @@
+## 0.1.0-dev.3 (unreleased)
+
+Milestone C: correctness-first CLI caching.
+
+- Cache in `.dart_tool/gqlify/`: verified warm hits skip generation entirely;
+  otherwise validation always runs in full and only formatting is memoized
+  (content-addressed, self-verifying artifacts).
+- `generate --clean`, `--explain` (per-output reasons, per-phase timings),
+  `check --clean/--explain`, `cache verify`, `cache clear`, `--lock-timeout`.
+- Inter-process locking, atomic manifest written only after verified outputs,
+  recovery from interrupted writes, leftover temp files and corrupt caches.
+- Canonical emission order: a library's output depends only on its own
+  document and the fragments it uses.
+- Differential, failure-injection, concurrency and property-based tests.
+
 ## 0.1.0-dev.2 (unreleased)
 
 Milestone B: semantic coverage and modes.

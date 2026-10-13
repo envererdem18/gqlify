@@ -17,11 +17,11 @@ await api.addToCart(cartId: cartId, sku: 'ABC123', quantity: 2);
 There are no `Options$Query$...` or `Variables$Query$...` wrappers to build, no
 `.graphql` assets read at runtime, and no query strings parsed at runtime.
 
-> **Status: early development (Milestone B of 5). Not published to pub.dev.**
+> **Status: early development (Milestone C of 5). Not published to pub.dev.**
 > Queries, mutations, fragments, enums, input objects, interfaces/unions,
-> custom scalars, introspection input and schema-only mode work end to end.
-> Incremental caching and the `build_runner` builder are planned. See
-> [Supported today](#supported-today).
+> custom scalars, introspection input, schema-only mode and a
+> correctness-first incremental CLI cache work end to end. The
+> `build_runner` builder is planned. See [Supported today](#supported-today).
 
 ## Packages
 
@@ -118,9 +118,33 @@ your `pubspec.yaml` SDK constraint and the `formatter:` section of
 | Command | What it does |
 | --- | --- |
 | `dart run gqlify generate` | Validates and generates. It writes only files whose content changed, removes outputs that are no longer produced (for example after deleting a document or switching mode), and never overwrites files it did not generate. On any error, no file is changed. |
-| `dart run gqlify check` | Validates and verifies that generated files are up to date without writing anything. Exits with `1` otherwise. Use this in CI. |
-| `--reporter json` | Prints one machine-readable JSON object (diagnostics, files, timing) to stdout. |
+| `dart run gqlify generate --explain` | Also reports, for each output, why it was regenerated, reused or removed, and the time spent per phase. |
+| `dart run gqlify generate --clean` | Recomputes everything without using cached results, reconciles outputs and rebuilds the cache. It never deletes unrelated files. |
+| `dart run gqlify check` | Validates and verifies that generated files are up to date without writing anything, not even cache files. Exits with `1` otherwise. Use this in CI. |
+| `dart run gqlify cache verify` | Checks the integrity of the CLI cache. Exits with `1` if it is corrupt. |
+| `dart run gqlify cache clear` | Deletes the CLI cache. Generated files are kept. |
+| `--reporter json` | Prints one machine-readable JSON object (diagnostics, files, cache status, and with `--explain` the reasons and timings) to stdout. |
 | `-C <dir>` | Runs for the package in `<dir>`. |
+| `--lock-timeout <s>` | Sets how long to wait for another gqlify process on the same package (default 120). |
+
+### Caching
+
+The CLI keeps a disposable cache in `.dart_tool/gqlify/`. The cache never
+changes results; deleting it only costs time:
+
+- **Nothing changed:** if no input changed since the last successful run and
+  every generated file still has the recorded content, gqlify verifies this
+  and exits without regenerating.
+- **Anything changed:** gqlify validates every document against the schema
+  again (a cache can never hide an error). It then reuses previously
+  formatted code for libraries whose generated source is identical, which
+  is the expensive part.
+- **On doubt:** a corrupt, outdated or inconsistent cache is ignored and
+  rebuilt, and `--explain` reports why.
+- **Safe under failure:** concurrent `gqlify` processes on one package wait
+  for each other, and interrupted runs repair themselves on the next run.
+
+`.dart_tool/` should not be committed.
 
 Diagnostics use the format
 `lib/graphql/products.graphql:3:5: error[unknown-field]: Cannot query field "nme" on type "Product".`
@@ -268,7 +292,7 @@ expect(transport.requests.single.variables, {'sku': 'A'});
 | Modes `operations`, `schema_only`, `both` | ✅ |
 | Full executable-document validation against the schema | ✅ |
 | CLI `generate`, `check`, JSON reporter | ✅ |
-| Incremental cache, `--clean`, `--explain`, `cache verify/clear` | Planned (Milestone C) |
+| Incremental cache, `--clean`, `--explain`, `cache verify/clear`, process locking, crash recovery | ✅ |
 | `build_runner` builder (`build`/`watch`) | Planned (Milestone D, required for 1.0) |
 | Subscriptions, persisted queries | Later |
 
@@ -280,6 +304,7 @@ dart analyze                     # strict analysis, including generated goldens
 dart test packages/gqlify packages/gqlify_runtime example
 (cd example && dart run gqlify check)
 GQLIFY_UPDATE_GOLDENS=1 dart test packages/gqlify/test/golden_test.dart  # refresh goldens
+GQLIFY_FUZZ_SEEDS=1-200 dart test packages/gqlify/test/cache_fuzz_test.dart  # longer fuzzing
 ```
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for the design.
