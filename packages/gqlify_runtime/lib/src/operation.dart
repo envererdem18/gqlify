@@ -19,8 +19,9 @@ abstract class GqlifyOperation<TData> {
   /// transitively uses. Embedded at build time; never read at runtime.
   String get document;
 
-  /// JSON-encodable variables. Nullable variables that were not provided are
-  /// omitted rather than sent as `null`.
+  /// JSON-encodable variables. Optional variables that were not provided are
+  /// omitted (so server-side defaults apply); generated operations offer
+  /// `withNull(...)` to send an explicit `null` instead.
   Map<String, Object?> get variables;
 
   /// Decodes the `data` member of a GraphQL response.

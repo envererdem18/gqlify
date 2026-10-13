@@ -17,10 +17,10 @@ await api.addToCart(cartId: cartId, sku: 'ABC123', quantity: 2);
 There are no `Options$Query$...` or `Variables$Query$...` wrappers to build, no
 `.graphql` assets read at runtime, and no query strings parsed at runtime.
 
-> **Status: early development (Milestone A of 5). Not published to pub.dev.**
-> Queries and mutations with scalar, object and list fields work end to end.
-> Fragments, enums, input objects, interfaces/unions, schema-only mode, the
-> `build_runner` builder and incremental caching are planned. See
+> **Status: early development (Milestone B of 5). Not published to pub.dev.**
+> Queries, mutations, fragments, enums, input objects, interfaces/unions,
+> custom scalars, introspection input and schema-only mode work end to end.
+> Incremental caching and the `build_runner` builder are planned. See
 > [Supported today](#supported-today).
 
 ## Packages
@@ -42,16 +42,21 @@ There are no `Options$Query$...` or `Variables$Query$...` wrappers to build, no
      gqlify: ^0.1.0
    ```
 
-2. Add your schema (SDL) and operations:
+2. Add your schema (SDL, or an introspection `.json`) and operations:
 
    ```graphql
    # lib/graphql/products.graphql
    query GetProduct($sku: ID!) {
      product(sku: $sku) {
-       sku
-       name
-       price
+       ...ProductSummary
+       categories { id name }
      }
+   }
+
+   fragment ProductSummary on Product {
+     sku
+     name
+     price
    }
    ```
 
@@ -59,9 +64,6 @@ There are no `Options$Query$...` or `Variables$Query$...` wrappers to build, no
 
    ```yaml
    schema: lib/graphql/schema.graphql
-   documents:             # optional, default: lib/**.graphql and lib/**.gql
-     - lib/graphql/**.graphql
-   client_name: GqlifyClient   # optional
    ```
 
 4. Generate:
@@ -70,34 +72,59 @@ There are no `Options$Query$...` or `Variables$Query$...` wrappers to build, no
    dart run gqlify generate
    ```
 
-   This writes `lib/graphql/schema.graphql.dart` (the client) and one
+   This writes `lib/graphql/schema.graphql.dart` (client, enums, inputs) and one
    `*.graphql.dart` library next to each operation document. Import the
    libraries whose operations you call.
 
 ## Configuration
 
-| Setting | Default | Meaning |
-| --- | --- | --- |
-| `schema` | (required) | SDL file, or a list of files (merged in order, `extend type` supported). |
-| `documents` | `[lib/**.graphql, lib/**.gql]` | Glob patterns for operation documents. Schema files are excluded automatically. |
-| `mode` | `operations` | `operations`. `schema_only` and `both` are planned for Milestone B. |
-| `client_name` | `GqlifyClient` | Name of the generated client class. |
+```yaml
+schema: lib/graphql/schema.graphql   # or a list of SDL files, or one introspection .json
+documents:                           # optional, default: lib/**.graphql and lib/**.gql
+  - lib/graphql/**.graphql
+mode: operations                     # operations | schema_only | both
+client_name: GqlifyClient            # optional
+scalars:                             # optional custom scalar mappings
+  DateTime:
+    type: DateTime
+    json_type: String                # String, int, double, num, bool, Map, List, Object
+    from_json: DateTime.parse
+    to_json: encodeDateTime          # optional
+    import: package:my_app/scalars.dart
+```
 
-Unknown settings are errors, so typos never pass silently. Generated code is
-formatted to match `dart format` in your package: gqlify uses your
-`pubspec.yaml` SDK constraint and the `formatter:` section of
+Unknown settings are errors, so typos never pass silently.
+
+### Modes
+
+| Mode | Generates |
+| --- | --- |
+| `operations` (default) | Client, operations and fragments, plus the enums and inputs they use |
+| `schema_only` | Every enum and input object of the schema. No operations are read. |
+| `both` | Everything from `operations` plus every enum and input object |
+
+Response classes only exist for operations and fragments. A response contains
+exactly the fields you selected, so gqlify does not generate a "full" class per
+schema object type that would pretend otherwise.
+
+### Formatting
+
+Generated code is formatted to match `dart format` in your package. gqlify uses
+your `pubspec.yaml` SDK constraint and the `formatter:` section of
 `analysis_options.yaml`.
 
 ## Command line
 
 | Command | What it does |
 | --- | --- |
-| `dart run gqlify generate` | Validates and generates. Writes only files whose content changed, removes outputs of deleted documents, and never overwrites files it did not generate. On any error, no file is changed. |
+| `dart run gqlify generate` | Validates and generates. It writes only files whose content changed, removes outputs that are no longer produced (for example after deleting a document or switching mode), and never overwrites files it did not generate. On any error, no file is changed. |
 | `dart run gqlify check` | Validates and verifies that generated files are up to date without writing anything. Exits with `1` otherwise. Use this in CI. |
-| `-C <dir>` | Run for the package in `<dir>`. |
+| `--reporter json` | Prints one machine-readable JSON object (diagnostics, files, timing) to stdout. |
+| `-C <dir>` | Runs for the package in `<dir>`. |
 
 Diagnostics use the format
 `lib/graphql/products.graphql:3:5: error[unknown-field]: Cannot query field "nme" on type "Product".`
+Warnings, for example `warning[deprecated-field]`, do not fail generation.
 
 ## Using the generated API
 
@@ -125,27 +152,94 @@ final response = await api.execute(
 if (response.hasErrors) print(response.errors);
 ```
 
+### Fragments
+
+Every fragment becomes an `abstract interface class`. Every generated class
+that spreads the fragment implements it, so you can write code against the
+fragment once:
+
+```dart
+Widget productTile(ProductSummary p) => Text('${p.name} – ${p.price}');
+
+productTile(data.product!);                 // from GetProduct
+productTile(searchData.results.first);      // from SearchProducts
+```
+
+Fragments can live in any document and spread other fragments. Nested
+selections and type conditions are typed too.
+
+### Interfaces and unions
+
+Fields of interface or union type decode by `__typename` into a sealed class
+hierarchy. gqlify adds `__typename` to the request automatically. Every
+hierarchy has an `$Other` class for types without their own selection,
+including types added to the server later, so switches are exhaustive and
+decoding never breaks on schema growth:
+
+```dart
+for (final hit in (await api.search(text: 'mug')).search) {
+  switch (hit) {
+    SearchSearch$Product() => productTile(hit),
+    SearchSearch$Category(:final name) => print('Category $name'),
+    SearchSearch$Other(:final typename) => print('Unhandled $typename'),
+  }
+}
+```
+
+### Enums
+
+```dart
+product.stockStatus == StockStatus.inStock;   // IN_STOCK -> inStock
+StockStatus.inStock.value;                    // 'IN_STOCK'
+```
+
+Values unknown to the client decode to `$unknown` instead of failing.
+Encoding `$unknown` throws, because it cannot be sent to the server.
+
+### Input objects, variables and `null`
+
+Optional fields and variables are **omitted** when you leave them `null`, so
+server defaults apply. To send an explicit `null`, use `withNull`:
+
+```dart
+const filter = ProductFilter(search: 'mug', stockStatus: StockStatus.inStock);
+await api.searchProducts(filter: filter);                     // {search, stock_status}
+await api.searchProducts(filter: filter.withNull(minPrice: true)); // + "min_price": null
+await api.execute(const SearchProductsQuery().withNull(filter: true)); // "filter": null
+```
+
+`@oneOf` inputs get one constructor per field, for example
+`Lookup.sku('MUG')`.
+
+### Custom scalars
+
+Unmapped custom scalars are passed through as JSON (`Object`). Map them in
+`gqlify.yaml` (see [Configuration](#configuration)). gqlify checks the wire
+type, then calls `from_json`. A failing conversion surfaces as a
+`GqlifyDecodingException`.
+
 ### Errors
 
 | Exception | When |
 | --- | --- |
-| `GraphQLResponseException` | The response has GraphQL `errors`, even if partial `data` came with them. Carries `errors`, the partial `data` and `extensions`. |
-| `GqlifyTransportException` | No GraphQL response: network error, timeout, or an HTTP error without a GraphQL body. |
-| `GqlifyDecodingException` | The response does not match the generated types, for example a missing non-null field. The message names the location, e.g. `GetProductProduct.categories[]`. |
+| `GraphQLResponseException` | The response has GraphQL `errors`, even with partial `data`. It carries the `errors`, the partial `data` and `extensions`. |
+| `GqlifyTransportException` | No GraphQL response was received: network error, timeout, or an HTTP error without a GraphQL body. |
+| `GqlifyDecodingException` | The response does not match the generated types: a missing non-null field, a wrong type, or a missing `__typename`. The message names the location, e.g. `GetProductProduct.categories[]`. |
 
 All three extend the sealed `GqlifyException`.
 
-### Types
+### Types and naming
 
 - `Int` → `int`, `Float` → `double`, `String`/`ID` → `String`, `Boolean` →
-  `bool`. Custom scalars are passed through as JSON (`Object`) for now.
+  `bool`.
 - Nullable GraphQL types are nullable in Dart. Fields under `@skip`/`@include`
   are nullable because they may be absent.
-- Field names become `lowerCamelCase` (`stock_quantity` → `stockQuantity`),
-  and aliases become field names.
-- Response classes have value equality, `toString` and `toJson`/`fromJson`.
-- Nullable variables are optional parameters and are omitted from the request
-  when `null`.
+- Field names become `lowerCamelCase` (`stock_quantity` → `stockQuantity`).
+  Aliases become field names.
+- Response classes, inputs and operations have value equality and
+  `toString`. Response classes also have `toJson`/`fromJson`.
+- Generated names never depend on other files. Name clashes are reported as
+  errors with a suggestion (usually an alias) instead of being renamed.
 
 ### Testing without a server
 
@@ -164,18 +258,19 @@ expect(transport.requests.single.variables, {'sku': 'A'});
 
 | Feature | Status |
 | --- | --- |
-| Queries and mutations, variables, aliases, nested objects and lists, nullability, `@skip`/`@include` | ✅ |
+| Queries, mutations, variables (defaults, lists, non-null), aliases, nested selections | ✅ |
+| Fragments (named, inline, nested, across files) as interfaces | ✅ |
+| Interfaces and unions, sealed classes decoded by `__typename`, unknown-type fallback | ✅ |
+| Enums (with unknown-value fallback), input objects, `@oneOf`, explicit `null` vs omitted | ✅ |
+| Custom scalar mappings | ✅ |
+| `@skip`/`@include` (optional fields), deprecation annotations and warnings | ✅ |
+| SDL (multiple files, extensions) and introspection JSON schemas | ✅ |
+| Modes `operations`, `schema_only`, `both` | ✅ |
 | Full executable-document validation against the schema | ✅ |
-| SDL schemas, multiple files, type extensions | ✅ |
-| CLI `generate` and `check` | ✅ |
-| Fragments, enums, input objects, interfaces/unions, custom scalar mapping | Planned (Milestone B) |
-| Schema-only mode, introspection JSON | Planned (Milestone B) |
+| CLI `generate`, `check`, JSON reporter | ✅ |
 | Incremental cache, `--clean`, `--explain`, `cache verify/clear` | Planned (Milestone C) |
 | `build_runner` builder (`build`/`watch`) | Planned (Milestone D, required for 1.0) |
 | Subscriptions, persisted queries | Later |
-
-Unsupported constructs are reported as `unsupported-feature` errors; they are
-never silently mis-generated.
 
 ## Development
 
@@ -184,6 +279,7 @@ dart pub get                     # resolves the whole workspace
 dart analyze                     # strict analysis, including generated goldens
 dart test packages/gqlify packages/gqlify_runtime example
 (cd example && dart run gqlify check)
+GQLIFY_UPDATE_GOLDENS=1 dart test packages/gqlify/test/golden_test.dart  # refresh goldens
 ```
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for the design.

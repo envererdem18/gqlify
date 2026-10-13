@@ -43,12 +43,16 @@ void main() {
       expect(camelCase('SKU_code'), 'skuCode');
       expect(camelCase('__typename'), 'typename');
       expect(camelCase('address_2'), 'address2');
+      expect(camelCase('IN_STOCK'), 'inStock');
+      expect(camelCase('OUT_OF_STOCK_2'), 'outOfStock2');
     });
 
     test('pascalCase', () {
       expect(pascalCase('getProduct'), 'GetProduct');
       expect(pascalCase('get_product'), 'GetProduct');
       expect(pascalCase('GetProduct'), 'GetProduct');
+      expect(pascalCase('URL_REWRITE'), 'UrlRewrite');
+      expect(pascalCase('URL'), 'URL');
     });
 
     test('escaping', () {

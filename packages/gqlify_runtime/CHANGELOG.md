@@ -1,5 +1,9 @@
+## 0.1.0-dev.2 (unreleased)
+
+- `gqlifyDeepEquals`/`gqlifyDeepHash` support maps and sets (used by
+  generated inputs and operations).
+
 ## 0.1.0-dev.1 (unreleased)
 
-- Milestone A: working vertical slice. Queries and mutations with scalar,
-  object and list fields; CLI `generate` and `check`; mock and HTTP
-  transports.
+- Milestone A: client base, `HttpTransport`, `MockTransport`, typed responses
+  and the sealed `GqlifyException` hierarchy.

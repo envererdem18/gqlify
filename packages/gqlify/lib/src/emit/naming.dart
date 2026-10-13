@@ -90,7 +90,7 @@ const reservedTypeNames = {
 const objectMembers = {'hashCode', 'runtimeType', 'toString', 'noSuchMethod'};
 
 /// `UpperCamelCase` from a GraphQL name: `price_range` -> `PriceRange`,
-/// `getProduct` -> `GetProduct`, `__typename` -> `Typename`.
+/// `getProduct` -> `GetProduct`, `IN_STOCK` -> `InStock`, `URL` -> `URL`.
 String pascalCase(String name) {
   final parts = _parts(name);
   if (parts.isEmpty) return name;
@@ -98,7 +98,7 @@ String pascalCase(String name) {
 }
 
 /// `lowerCamelCase` from a GraphQL name: `cart_id` -> `cartId`,
-/// `URL` -> `url`, `SKU_code` -> `skuCode`.
+/// `URL` -> `url`, `IN_STOCK` -> `inStock`, `SKU_code` -> `skuCode`.
 String camelCase(String name) {
   final parts = _parts(name);
   if (parts.isEmpty) return name;
@@ -109,8 +109,13 @@ String camelCase(String name) {
   return head + parts.skip(1).map(_capitalize).join();
 }
 
-List<String> _parts(String name) =>
-    name.split('_').where((p) => p.isNotEmpty).toList();
+/// Underscore-separated parts; SCREAMING_SNAKE_CASE parts are lowercased so
+/// that they capitalize as words.
+List<String> _parts(String name) {
+  final parts = name.split('_').where((p) => p.isNotEmpty).toList();
+  final screaming = name.contains('_') && name == name.toUpperCase();
+  return screaming ? [for (final p in parts) p.toLowerCase()] : parts;
+}
 
 String _capitalize(String s) => '${s[0].toUpperCase()}${s.substring(1)}';
 

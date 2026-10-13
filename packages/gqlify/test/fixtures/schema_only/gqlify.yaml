@@ -1,0 +1,2 @@
+schema: schema.graphql
+mode: schema_only

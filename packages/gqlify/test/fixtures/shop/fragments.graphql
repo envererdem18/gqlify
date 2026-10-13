@@ -1,0 +1,24 @@
+fragment MoneyFields on Money {
+  amount
+  currency
+}
+
+fragment ProductCard on Product {
+  id
+  name
+  status
+  price {
+    ...MoneyFields
+  }
+}
+
+fragment NodeSummary on Node {
+  id
+  ... on Product {
+    name
+    tags
+  }
+  ... on User {
+    email
+  }
+}

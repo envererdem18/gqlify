@@ -8,6 +8,8 @@ import '../emit/naming.dart';
 import '../schema/schema.dart';
 import '../schema/type_ref.dart';
 import 'model.dart';
+import 'naming_registry.dart';
+import 'selections.dart';
 
 /// Members of a generated operation class that variables must not shadow.
 const _operationMembers = {
@@ -17,18 +19,43 @@ const _operationMembers = {
   'document',
   'variables',
   'parseData',
+  'withNull',
 };
 
-/// Members of a generated response class that fields must not shadow.
-const _selectionMembers = {...objectMembers, 'toJson', 'fromJson'};
+/// Members of a generated input class that fields must not shadow.
+const _inputMembers = {...objectMembers, 'toJson', 'withNull'};
+
+/// Members of generated enums that values must not shadow.
+const _enumMembers = {
+  ...objectMembers,
+  'values',
+  'index',
+  'name',
+  'value',
+  'toJson',
+  'fromJson',
+};
 
 /// Members of the generated client that operation methods must not shadow.
 const _clientMembers = {...objectMembers, 'execute', 'close', 'transport'};
 
-/// Builds the [GenerationModel] for validated [documents].
+/// Dart types a custom scalar can have without a `from_json` conversion.
+const _jsonDartTypes = {
+  'String',
+  'int',
+  'double',
+  'num',
+  'bool',
+  'Object',
+  'Map<String, Object?>',
+  'List<Object?>',
+};
+
+/// Builds the [GenerationModel].
 ///
-/// Reports unsupported constructs and naming conflicts to [sink]; the model
-/// must not be emitted if [sink] has errors afterwards.
+/// [documents] must be validated and have `__typename` added. Reports
+/// unsupported constructs and naming conflicts to [sink]; the model must not
+/// be emitted if [sink] has errors afterwards.
 GenerationModel buildModel(
   Schema schema,
   DocumentSet documents,
@@ -36,75 +63,269 @@ GenerationModel buildModel(
   DiagnosticSink sink,
 ) => _ModelBuilder(schema, documents, config, sink).build();
 
-final class _ModelBuilder {
-  _ModelBuilder(this.schema, this.documents, this.config, this.sink);
+final class _ModelBuilder implements LeafTypes {
+  _ModelBuilder(this.schema, this.documents, this.config, this.sink)
+    : names = NamingRegistry(sink);
 
   final Schema schema;
   final DocumentSet documents;
   final GqlifyConfig config;
   final DiagnosticSink sink;
+  final NamingRegistry names;
 
-  /// Every generated top-level name, mapped to a description of its origin.
-  final Map<String, String> _topLevelNames = {};
+  final Map<String, EnumModel> _enums = {};
+  final Map<String, InputModel> _inputs = {};
   final Map<String, String> _methodNames = {};
-
-  late String _path;
+  late final LibraryModel _schemaLibrary;
+  late final SelectionBuilder _selections;
 
   GenerationModel build() {
-    _claim(config.clientName, 'the generated client', null);
-    final libraries = <DocumentLibrary>[];
+    _checkScalarConfig();
+    _schemaLibrary = LibraryModel(
+      outputPath: config.schemaOutputPath,
+      sourcePaths: config.schema,
+    );
+    final libraries = <String, LibraryModel>{
+      _schemaLibrary.outputPath: _schemaLibrary,
+    };
+
     if (config.mode.includesOperations) {
+      names.claim(config.clientName, 'the generated client');
+      _schemaLibrary.clientName = config.clientName;
+
       final sorted = [...documents.documents]
         ..sort((a, b) => a.path.compareTo(b.path));
+      final fragmentLibraries = <String, ({String output, String source})>{};
       for (final doc in sorted) {
-        _path = doc.path;
-        if (doc.fragments.isNotEmpty) {
-          _unsupported(doc.fragments.first, 'Fragment definitions');
+        final library = LibraryModel(
+          outputPath: '${doc.path}.dart',
+          sourcePaths: [doc.path],
+        )..imports.add(_schemaLibrary.outputPath);
+        libraries[library.outputPath] = library;
+        for (final f in doc.fragments) {
+          fragmentLibraries[f.name.value] = (
+            output: library.outputPath,
+            source: doc.path,
+          );
         }
-        final operations = [for (final op in doc.operations) ?_operation(op)];
-        if (operations.isEmpty) continue;
-        libraries.add(
-          DocumentLibrary(
-            sourcePath: doc.path,
-            outputPath: '${doc.path}.dart',
-            operations: operations,
-          ),
-        );
+      }
+      _selections = SelectionBuilder(
+        schema: schema,
+        fragments: {
+          for (final MapEntry(:key, :value) in documents.fragments.entries)
+            key: value.node,
+        },
+        fragmentLibraries: fragmentLibraries,
+        leafTypes: this,
+        names: names,
+        sink: sink,
+      )..libraries.addAll(libraries);
+
+      for (final doc in sorted) {
+        for (final fragment in doc.fragments) {
+          _selections.fragmentInterface(fragment.name.value);
+        }
+        final library = libraries['${doc.path}.dart']!;
+        for (final op in doc.operations) {
+          final model = _operation(doc.path, library, op);
+          if (model != null) library.operations.add(model);
+        }
       }
     }
+
+    if (config.mode.includesAllSchemaTypes) {
+      for (final type in schema.types.values) {
+        if (type is EnumType) _enum(type);
+        if (type is InputObjectType) _input(type, at: null);
+      }
+    }
+    _schemaLibrary.enums.addAll(
+      _enums.values.toList()
+        ..sort((a, b) => a.graphqlName.compareTo(b.graphqlName)),
+    );
+    _schemaLibrary.inputs.addAll(
+      _inputs.values.toList()
+        ..sort((a, b) => a.graphqlName.compareTo(b.graphqlName)),
+    );
+
     return GenerationModel(
-      schemaOutputPath: config.schemaOutputPath,
-      schemaSourcePaths: config.schema,
-      clientName: config.clientName,
-      documents: libraries,
+      [
+        for (final library in libraries.values)
+          if (!library.isEmpty) library,
+      ]..sort((a, b) => a.outputPath.compareTo(b.outputPath)),
     );
   }
 
-  void _unsupported(ast.Node at, String what) => sink.error(
-    'unsupported-feature',
-    '$what are not supported by this version of gqlify yet.',
-    path: _path,
-    at: at,
-  );
+  // ---------------------------------------------------------------------------
+  // Leaf and schema types
 
-  /// Registers a generated top-level [name]; reports a collision if taken.
-  bool _claim(String name, String origin, ast.Node? at) {
-    final previous = _topLevelNames[name];
-    if (previous != null) {
-      sink.error(
-        'name-collision',
-        'Generated name "$name" for $origin collides with $previous. '
-            'Rename the operation or use a field alias.',
-        path: at == null ? null : _path,
-        at: at,
-      );
-      return false;
+  void _checkScalarConfig() {
+    for (final MapEntry(key: name, value: scalar) in config.scalars.entries) {
+      final type = schema[name];
+      String? problem;
+      if (type == null) {
+        problem = 'the schema has no scalar "$name"';
+      } else if (type is! ScalarType) {
+        problem = '"$name" is not a scalar';
+      } else if (type.isBuiltIn) {
+        problem = 'built-in scalar "$name" cannot be remapped';
+      } else if (scalar.fromJson == null &&
+          !_jsonDartTypes.contains(scalar.type)) {
+        problem =
+            'type "${scalar.type}" is not a JSON type, so "from_json" is required';
+      }
+      if (problem != null) {
+        sink.error(
+          'invalid-config',
+          'Invalid mapping for scalar "$name": $problem.',
+          path: GqlifyConfig.fileName,
+        );
+      }
     }
-    _topLevelNames[name] = '$origin${at == null ? '' : ' ($_path)'}';
-    return true;
   }
 
-  OperationModel? _operation(ast.OperationDefinitionNode op) {
+  ScalarMapping _scalarMapping(ScalarType type) {
+    switch (type.name) {
+      case 'Int':
+        return ScalarMapping.int_;
+      case 'Float':
+        return ScalarMapping.double_;
+      case 'String' || 'ID':
+        return ScalarMapping.string;
+      case 'Boolean':
+        return ScalarMapping.bool_;
+    }
+    final configured = config.scalars[type.name];
+    if (configured == null) return ScalarMapping.json;
+    return ScalarMapping(
+      dartType: configured.type,
+      jsonType: configured.jsonType,
+      fromJson: configured.fromJson,
+      toJson: configured.toJson,
+      import: configured.import,
+    );
+  }
+
+  @override
+  ValueType? leaf(
+    SchemaType type, {
+    required bool nullable,
+    required ast.Node at,
+  }) => switch (type) {
+    ScalarType() => ScalarValue(
+      type.name,
+      _scalarMapping(type),
+      nullable: nullable,
+    ),
+    EnumType() => EnumValue(_enum(type), nullable: nullable),
+    _ => throw StateError('Not a leaf type: ${type.name}'),
+  };
+
+  EnumModel _enum(EnumType type) {
+    final existing = _enums[type.name];
+    if (existing != null) return existing;
+    final dartName = escapeType(pascalCase(type.name));
+    names.claim(dartName, 'enum "${type.name}"');
+    final values = <EnumValueModel>[];
+    final seen = <String, String>{};
+    for (final value in type.values.values) {
+      final dartValue = escapeMember(camelCase(value.name), _enumMembers);
+      final previous = seen[dartValue];
+      if (previous != null) {
+        sink.error(
+          'name-collision',
+          'Enum values "${type.name}.$previous" and "${type.name}.${value.name}" '
+              'both map to Dart value "$dartValue".',
+        );
+        continue;
+      }
+      seen[dartValue] = value.name;
+      values.add(
+        EnumValueModel(
+          graphqlName: value.name,
+          dartName: dartValue,
+          description: value.description,
+          deprecationReason: value.deprecationReason,
+        ),
+      );
+    }
+    return _enums[type.name] = EnumModel(
+      graphqlName: type.name,
+      dartName: dartName,
+      values: values,
+      description: type.description,
+    );
+  }
+
+  InputModel _input(InputObjectType type, {required ast.Node? at}) {
+    final existing = _inputs[type.name];
+    if (existing != null) return existing;
+    final dartName = escapeType(pascalCase(type.name));
+    names.claim(dartName, 'input "${type.name}"');
+    final model = InputModel(
+      graphqlName: type.name,
+      dartName: dartName,
+      isOneOf: type.isOneOf,
+      description: type.description,
+    );
+    _inputs[type.name] = model; // Before fields: inputs may be recursive.
+    final seen = <String, String>{};
+    for (final field in type.fields.values) {
+      final dartField = escapeMember(camelCase(field.name), _inputMembers);
+      final previous = seen[dartField];
+      if (previous != null) {
+        sink.error(
+          'name-collision',
+          'Input fields "${type.name}.$previous" and "${type.name}.${field.name}" '
+              'both map to Dart field "$dartField".',
+        );
+        continue;
+      }
+      seen[dartField] = field.name;
+      model.fields.add(
+        InputFieldModel(
+          graphqlName: field.name,
+          dartName: dartField,
+          type: _inputValueType(field.type, at),
+          hasDefault: field.defaultValue != null,
+          description: field.description,
+          deprecationReason: field.deprecationReason,
+        ),
+      );
+    }
+    return model;
+  }
+
+  ValueType _inputValueType(TypeRef ref, ast.Node? at) {
+    final nullable = !ref.isNonNull;
+    switch (ref) {
+      case ListTypeRef(:final ofType):
+        return ListValue(_inputValueType(ofType, at), nullable: nullable);
+      case NamedTypeRef(:final name):
+        return switch (schema[name]!) {
+          final ScalarType t => ScalarValue(
+            t.name,
+            _scalarMapping(t),
+            nullable: nullable,
+          ),
+          final EnumType t => EnumValue(_enum(t), nullable: nullable),
+          final InputObjectType t => InputObjectValue(
+            _input(t, at: at),
+            nullable: nullable,
+          ),
+          _ => throw StateError('Not an input type: $name'),
+        };
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Operations
+
+  OperationModel? _operation(
+    String path,
+    LibraryModel library,
+    ast.OperationDefinitionNode op,
+  ) {
     final name = op.name!.value;
     final suffix = switch (op.type) {
       ast.OperationType.query => 'Query',
@@ -115,22 +336,20 @@ final class _ModelBuilder {
     if (base.length > suffix.length && base.endsWith(suffix)) {
       base = base.substring(0, base.length - suffix.length);
     }
-
     final descriptorName = escapeType('$base$suffix');
-    final dataName = escapeType('${base}Data');
     final extensionName = escapeType('$base${suffix}Call');
     var methodName = camelCase(base);
     if (dartReservedWords.contains(methodName)) methodName = '\$$methodName';
 
-    final errorsBefore = sink.items.where((d) => d.isError).length;
-    _claim(descriptorName, 'operation "$name"', op.name);
-    _claim(extensionName, 'operation "$name"', op.name);
+    final origin = 'operation "$name"';
+    names.claim(descriptorName, origin, path: path, at: op.name);
+    names.claim(extensionName, origin, path: path, at: op.name);
     if (_clientMembers.contains(methodName)) {
       sink.error(
         'name-collision',
         'Operation "$name" would generate method "$methodName", which is a '
             'member of the generated client. Rename the operation.',
-        path: _path,
+        path: path,
         at: op.name,
       );
     } else if (_methodNames[methodName] case final previous?) {
@@ -138,40 +357,53 @@ final class _ModelBuilder {
         'name-collision',
         'Operation "$name" would generate client method "$methodName", '
             'already generated for $previous. Rename one of the operations.',
-        path: _path,
+        path: path,
         at: op.name,
       );
     } else {
-      _methodNames[methodName] = 'operation "${op.name!.value}" ($_path)';
+      _methodNames[methodName] = '$origin ($path)';
     }
 
-    final variables = [for (final v in op.variableDefinitions) ?_variable(v)];
-    final seenVariables = <String, String>{};
-    for (final v in variables) {
-      final previous = seenVariables[v.dartName];
+    final variables = <InputFieldModel>[];
+    final seen = <String, String>{};
+    for (final v in op.variableDefinitions) {
+      final graphqlName = v.variable.name.value;
+      final dartName = escapeMember(camelCase(graphqlName), _operationMembers);
+      final previous = seen[dartName];
       if (previous != null) {
         sink.error(
           'name-collision',
-          'Variables "\$$previous" and "\$${v.graphqlName}" both map to Dart '
-              'parameter "${v.dartName}".',
-          path: _path,
-          at: op.name,
+          'Variables "\$$previous" and "\$$graphqlName" both map to Dart '
+              'parameter "$dartName".',
+          path: path,
+          at: v,
         );
+        continue;
       }
-      seenVariables[v.dartName] = v.graphqlName;
+      seen[dartName] = graphqlName;
+      variables.add(
+        InputFieldModel(
+          graphqlName: graphqlName,
+          dartName: dartName,
+          type: _inputValueType(TypeRef.fromAst(v.type), v),
+          hasDefault: v.defaultValue?.value != null,
+        ),
+      );
     }
 
     final root = schema[schema.rootTypeName(op.type)!]!;
-    final data = _selectionClass(
-      dataName,
-      base,
-      root,
-      [op.selectionSet],
-      'operation "$name"',
-      op.name!,
+    final dataName = escapeType('${base}Data');
+    _selections.responseType(
+      dartName: dataName,
+      nestedPrefix: base,
+      static: root,
+      sets: SelectionBuilder.rootSets(op.selectionSet),
+      required: const [],
+      library: library.outputPath,
+      origin: origin,
+      at: op.name!,
+      path: path,
     );
-    if (data == null) return null;
-    if (sink.items.where((d) => d.isError).length != errorsBefore) return null;
 
     return OperationModel(
       name: name,
@@ -180,191 +412,39 @@ final class _ModelBuilder {
       methodName: methodName,
       extensionName: extensionName,
       documentConstName: '_${camelCase(base)}${suffix}Document',
-      data: data,
+      dataName: dataName,
       variables: variables,
-      document: printExecutable(op),
+      document: _document(op),
+      clientName: config.clientName,
     );
   }
 
-  VariableModel? _variable(ast.VariableDefinitionNode v) {
-    final graphqlName = v.variable.name.value;
-    final type = _inputValueType(TypeRef.fromAst(v.type), v);
-    if (type == null) return null;
-    return VariableModel(
-      graphqlName: graphqlName,
-      dartName: escapeMember(camelCase(graphqlName), _operationMembers),
-      type: type,
-      hasDefault: v.defaultValue?.value != null,
-    );
-  }
-
-  ValueType? _inputValueType(TypeRef ref, ast.Node at) {
-    final nullable = !ref.isNonNull;
-    switch (ref) {
-      case ListTypeRef(:final ofType):
-        final item = _inputValueType(ofType, at);
-        return item == null ? null : ListValue(item, nullable: nullable);
-      case NamedTypeRef(:final name):
-        final type = schema[name];
-        if (type is ScalarType) return _scalar(type, nullable: nullable);
-        _unsupported(
-          at,
-          '${type is EnumType ? 'Enum' : 'Input object'} variables',
-        );
-        return null;
-    }
-  }
-
-  ScalarValue _scalar(ScalarType type, {required bool nullable}) =>
-      ScalarValue(type.name, switch (type.name) {
-        'Int' => 'int',
-        'Float' => 'double',
-        'String' || 'ID' => 'String',
-        'Boolean' => 'bool',
-        _ => 'Object',
-      }, nullable: nullable);
-
-  /// Builds the class for the merged [sets] selected on [parent].
-  SelectionClass? _selectionClass(
-    String dartName,
-    String nestedPrefix,
-    SchemaType parent,
-    List<ast.SelectionSetNode> sets,
-    String origin,
-    ast.Node at,
-  ) {
-    _claim(dartName, origin, at);
-
-    // Group fields by response key, preserving first-occurrence order. The
-    // validator guarantees that fields sharing a key are mergeable.
-    final grouped = <String, List<ast.FieldNode>>{};
-    for (final set in sets) {
+  /// The operation followed by every fragment it transitively spreads,
+  /// sorted by name.
+  String _document(ast.OperationDefinitionNode op) {
+    final used = <String>{};
+    void visit(ast.SelectionSetNode set) {
       for (final selection in set.selections) {
         switch (selection) {
-          case ast.FieldNode():
-            grouped
-                .putIfAbsent(
-                  (selection.alias ?? selection.name).value,
-                  () => [],
-                )
-                .add(selection);
-          case ast.InlineFragmentNode():
-            _unsupported(selection, 'Inline fragments');
-          case ast.FragmentSpreadNode():
-            _unsupported(selection, 'Fragment spreads');
+          case ast.FieldNode(:final selectionSet?):
+            visit(selectionSet);
+          case ast.InlineFragmentNode(:final selectionSet):
+            visit(selectionSet);
+          case ast.FragmentSpreadNode(:final name):
+            if (used.add(name.value)) {
+              visit(documents.fragments[name.value]!.node.selectionSet);
+            }
           default:
             break;
         }
       }
     }
 
-    final fields = <FieldModel>[];
-    final dartNames = <String, String>{};
-    for (final MapEntry(key: responseKey, value: nodes) in grouped.entries) {
-      final def = schema.field(parent, nodes.first.name.value)!;
-      final dartFieldName = escapeMember(
-        camelCase(responseKey),
-        _selectionMembers,
-      );
-      final previous = dartNames[dartFieldName];
-      if (previous != null) {
-        sink.error(
-          'name-collision',
-          'Response keys "$previous" and "$responseKey" both map to Dart field '
-              '"$dartFieldName" in "$dartName". Use an alias for one of them.',
-          path: _path,
-          at: nodes.first,
-        );
-        continue;
-      }
-      dartNames[dartFieldName] = responseKey;
-
-      final childSets = [for (final n in nodes) ?n.selectionSet];
-      final type = _outputValueType(
-        def.type,
-        childSets,
-        '$nestedPrefix${pascalCase(responseKey)}',
-        'field "$responseKey" of $origin',
-        nodes.first,
-      );
-      if (type == null) continue;
-      fields.add(
-        FieldModel(
-          responseKey: responseKey,
-          dartName: dartFieldName,
-          // A field excluded by @skip/@include is absent from the response.
-          type: nodes.every(_isConditional) ? _asNullable(type) : type,
-          description: def.description,
-          deprecationReason: def.deprecationReason,
-        ),
-      );
-    }
-    return SelectionClass(dartName, parent.name, fields);
-  }
-
-  ValueType? _outputValueType(
-    TypeRef ref,
-    List<ast.SelectionSetNode> childSets,
-    String className,
-    String origin,
-    ast.Node at,
-  ) {
-    final nullable = !ref.isNonNull;
-    switch (ref) {
-      case ListTypeRef(:final ofType):
-        final item = _outputValueType(ofType, childSets, className, origin, at);
-        return item == null ? null : ListValue(item, nullable: nullable);
-      case NamedTypeRef(:final name):
-        final type = schema[name]!;
-        switch (type) {
-          case ScalarType():
-            return _scalar(type, nullable: nullable);
-          case EnumType():
-            _unsupported(at, 'Enum fields');
-            return null;
-          case ObjectType():
-            final cls = _selectionClass(
-              escapeType(className),
-              className,
-              type,
-              childSets,
-              origin,
-              at,
-            );
-            return cls == null ? null : ObjectValue(cls, nullable: nullable);
-          case InterfaceType() || UnionType():
-            _unsupported(at, 'Interface and union fields');
-            return null;
-          case InputObjectType():
-            throw StateError('Input type in output position: $name');
-        }
-    }
-  }
-
-  static ValueType _asNullable(ValueType type) => switch (type) {
-    ScalarValue() => ScalarValue(
-      type.graphqlType,
-      type.baseDartType,
-      nullable: true,
-    ),
-    ObjectValue() => ObjectValue(type.selection, nullable: true),
-    ListValue() => ListValue(type.item, nullable: true),
-  };
-
-  /// Whether @skip/@include may exclude [field] from the response.
-  static bool _isConditional(ast.FieldNode field) {
-    for (final d in field.directives) {
-      final name = d.name.value;
-      if (name != 'skip' && name != 'include') continue;
-      final condition = d.arguments
-          .where((a) => a.name.value == 'if')
-          .firstOrNull
-          ?.value;
-      final alwaysIncluded =
-          condition is ast.BooleanValueNode &&
-          condition.value == (name == 'include');
-      if (!alwaysIncluded) return true;
-    }
-    return false;
+    visit(op.selectionSet);
+    return [
+      printExecutable(op),
+      for (final name in used.toList()..sort())
+        printExecutable(documents.fragments[name]!.node),
+    ].join('\n');
   }
 }

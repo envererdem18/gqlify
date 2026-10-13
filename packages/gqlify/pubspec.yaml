@@ -2,7 +2,7 @@ name: gqlify
 description: >-
   GraphQL, simplified for Dart. A build-time GraphQL code generator producing
   small, strongly typed Dart APIs from a schema and operation documents.
-version: 0.1.0-dev.1
+version: 0.1.0-dev.2
 publish_to: none
 resolution: workspace
 

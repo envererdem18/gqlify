@@ -57,6 +57,9 @@ final class _Validator {
   void _error(String code, String message, String path, ast.Node? at) =>
       sink.error(code, message, path: path, at: at);
 
+  void _deprecated(_Scope scope, String code, String message, ast.Node at) =>
+      sink.warning(code, message, path: scope.path, at: at);
+
   void run() {
     _checkUniqueNames();
     for (final fragment in documents.fragments.values) {
@@ -467,6 +470,14 @@ final class _Validator {
       }
       return;
     }
+    if (def.deprecationReason case final reason?) {
+      _deprecated(
+        scope,
+        'deprecated-field',
+        'Field "${parent.name}.$name" is deprecated: $reason',
+        node,
+      );
+    }
     _arguments(
       scope,
       node.arguments,
@@ -527,6 +538,14 @@ final class _Validator {
           arg,
         );
         continue;
+      }
+      if (def.deprecationReason case final reason?) {
+        _deprecated(
+          scope,
+          'deprecated-argument',
+          'Argument "$name" of $owner is deprecated: $reason',
+          arg,
+        );
       }
       _value(
         scope,
@@ -642,7 +661,16 @@ final class _Validator {
           case EnumType():
             if (value is! ast.EnumValueNode) {
               invalid('expected an enum value of "${type.name}".');
-            } else if (!type.values.containsKey(value.name.value)) {
+            } else if (type.values[value.name.value] case final enumValue?) {
+              if (enumValue.deprecationReason case final reason?) {
+                _deprecated(
+                  scope,
+                  'deprecated-enum-value',
+                  'Enum value "${type.name}.${enumValue.name}" is deprecated: $reason',
+                  value,
+                );
+              }
+            } else {
               invalid(
                 '"${value.name.value}" is not a value of enum "${type.name}".',
               );
@@ -715,6 +743,14 @@ final class _Validator {
           field,
         );
         continue;
+      }
+      if (def.deprecationReason case final reason?) {
+        _deprecated(
+          scope,
+          'deprecated-input-field',
+          'Input field "${type.name}.$name" is deprecated: $reason',
+          field,
+        );
       }
       _value(
         scope,

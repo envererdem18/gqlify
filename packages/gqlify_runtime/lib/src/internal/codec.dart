@@ -49,7 +49,8 @@ GqlifyDecodingException _mismatch(
           : 'Missing required field $location (expected $expected)',
     );
 
-/// Deep equality for (possibly nested) lists of generated values.
+/// Deep equality for (possibly nested) lists, maps and sets of generated or
+/// JSON values.
 bool gqlifyDeepEquals(Object? a, Object? b) {
   if (identical(a, b)) return true;
   if (a is List && b is List) {
@@ -59,9 +60,27 @@ bool gqlifyDeepEquals(Object? a, Object? b) {
     }
     return true;
   }
+  if (a is Map && b is Map) {
+    if (a.length != b.length) return false;
+    for (final key in a.keys) {
+      if (!b.containsKey(key) || !gqlifyDeepEquals(a[key], b[key])) {
+        return false;
+      }
+    }
+    return true;
+  }
+  if (a is Set && b is Set) {
+    return a.length == b.length && a.containsAll(b);
+  }
   return a == b;
 }
 
 /// Hash consistent with [gqlifyDeepEquals].
-int gqlifyDeepHash(Object? value) =>
-    value is List ? Object.hashAll(value.map(gqlifyDeepHash)) : value.hashCode;
+int gqlifyDeepHash(Object? value) => switch (value) {
+      List() => Object.hashAll(value.map(gqlifyDeepHash)),
+      Map() => Object.hashAllUnordered(
+          value.entries.map((e) => Object.hash(e.key, gqlifyDeepHash(e.value))),
+        ),
+      Set() => Object.hashAllUnordered(value),
+      _ => value.hashCode,
+    };

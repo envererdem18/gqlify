@@ -1,0 +1,8 @@
+schema: schema.graphql
+scalars:
+  DateTime:
+    type: DateTime
+    json_type: String
+    from_json: DateTime.parse
+    to_json: encodeDateTime
+    import: scalars.dart

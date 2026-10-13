@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:gqlify/gqlify.dart';
+import 'package:gqlify/src/cli/project.dart';
 import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 
@@ -59,32 +60,87 @@ void main() {
     expect(result.outputs, isEmpty);
   });
 
-  test('reports unsupported features explicitly', () {
-    List<String> codes(String doc) => [
-      for (final d in generate(shopSchema, {'lib/a.graphql': doc}).diagnostics)
-        if (d.isError) d.code,
+  group('modes', () {
+    GenerationResult run(GenerationMode mode, Map<String, String> docs) =>
+        generate(
+          shopSchema,
+          docs,
+          config: GqlifyConfig(schema: [testSchemaPath], mode: mode),
+        );
+    const docs = {'lib/a.graphql': 'query A { products { id status } }'};
+
+    test('operations: only the schema types operations use', () {
+      final result = run(GenerationMode.operations, docs);
+      expect(result.outputs.keys, [
+        'lib/a.graphql.dart',
+        'lib/schema.graphql.dart',
+      ]);
+      final schema = result.outputs['lib/schema.graphql.dart']!;
+      expect(schema, contains('class GqlifyClient'));
+      expect(schema, contains('enum Status'));
+      expect(schema, isNot(contains('class ProductFilter')));
+    });
+
+    test('schema_only: every enum and input, no client, documents ignored', () {
+      final result = run(GenerationMode.schemaOnly, {
+        ...docs,
+        'lib/broken.graphql': 'query Broken { nope }',
+      });
+      expect(result.diagnostics, isEmpty);
+      expect(result.outputs.keys, ['lib/schema.graphql.dart']);
+      final schema = result.outputs['lib/schema.graphql.dart']!;
+      expect(schema, isNot(contains('class GqlifyClient')));
+      expect(schema, contains('enum Status'));
+      expect(schema, contains('final class ProductFilter'));
+      expect(schema, contains('final class Search'));
+      // Object, interface and union types are not generated in schema mode.
+      expect(schema, isNot(contains('class Product ')));
+    });
+
+    test('schema_only works without any documents', () {
+      expect(run(GenerationMode.schemaOnly, {}).outputs.keys, [
+        'lib/schema.graphql.dart',
+      ]);
+    });
+
+    test('both: all schema types plus operations', () {
+      final result = run(GenerationMode.both, docs);
+      expect(result.outputs.keys, [
+        'lib/a.graphql.dart',
+        'lib/schema.graphql.dart',
+      ]);
+      final schema = result.outputs['lib/schema.graphql.dart']!;
+      expect(schema, contains('class GqlifyClient'));
+      expect(schema, contains('final class ProductFilter'));
+      expect(
+        result.outputs['lib/a.graphql.dart'],
+        run(GenerationMode.operations, docs).outputs['lib/a.graphql.dart'],
+      );
+    });
+  });
+
+  test('custom scalar mappings are validated', () {
+    List<String> errors(Map<String, ScalarConfig> scalars) => [
+      for (final d in generate(
+        shopSchema,
+        const {},
+        config: GqlifyConfig(schema: [testSchemaPath], scalars: scalars),
+      ).diagnostics)
+        if (d.isError) d.message,
     ];
-    expect(codes(r'query Q($id: ID!) { product(id: $id) { status } }'), [
-      'unsupported-feature',
-    ]);
+    expect(errors({'DateTime': const ScalarConfig(type: 'String')}), isEmpty);
     expect(
-      codes(r'query Q($f: ProductFilter) { products(filter: $f) { id } }'),
-      ['unsupported-feature'],
+      errors({'Nope': const ScalarConfig(type: 'String')}).single,
+      contains('no scalar "Nope"'),
     );
-    expect(codes('query Q { node(id: "1") { id } }'), ['unsupported-feature']);
     expect(
-      codes('query Q { products { ...F } } fragment F on Product { id }'),
-      contains('unsupported-feature'),
+      errors({'Int': const ScalarConfig(type: 'BigInt')}).single,
+      contains('cannot be remapped'),
     );
-    final schemaOnly = generate(
-      _schema,
-      {},
-      config: GqlifyConfig(
-        schema: [testSchemaPath],
-        mode: GenerationMode.schemaOnly,
-      ),
+    expect(
+      errors({'DateTime': const ScalarConfig(type: 'DateTime')}).single,
+      contains('"from_json" is required'),
     );
-    expect(schemaOnly.diagnostics.single.code, 'unsupported-feature');
   });
 
   test('reports naming collisions instead of renaming', () {
@@ -195,43 +251,17 @@ void main() {
   });
 
   test('example package outputs match a fresh generation (golden)', () {
-    final example = p.normalize(
-      p.join(Directory.current.path, '..', '..', 'example'),
+    // Loads inputs exactly like the CLI does.
+    final project = Project(
+      p.normalize(p.join(Directory.current.path, '..', '..', 'example')),
     );
-    final schemaPath = 'lib/graphql/schema.graphql';
-    final docs = Directory(p.join(example, 'lib', 'graphql'))
-        .listSync()
-        .whereType<File>()
-        .where(
-          (f) =>
-              f.path.endsWith('.graphql') && !f.path.endsWith('schema.graphql'),
-        )
-        .map(
-          (f) => GqlifySource(
-            p.relative(f.path, from: example),
-            f.readAsStringSync(),
-          ),
-        )
-        .toList();
-    final result = GqlifyEngine().generate(
-      GenerationInput(
-        config: GqlifyConfig(schema: [schemaPath]),
-        schema: [
-          GqlifySource(
-            schemaPath,
-            File(p.join(example, schemaPath)).readAsStringSync(),
-          ),
-        ],
-        format: FormatSettings.fromProjectFiles(
-          pubspecYaml: File(p.join(example, 'pubspec.yaml')).readAsStringSync(),
-        ),
-        documents: docs,
-      ),
-    );
-    expect(result.diagnostics, isEmpty);
+    final sink = DiagnosticSink();
+    final input = project.loadInput(project.loadConfig(sink)!, sink)!;
+    final result = GqlifyEngine().generate(input);
+    expect(result.hasErrors, isFalse);
     for (final MapEntry(key: path, value: content) in result.outputs.entries) {
       expect(
-        File(p.join(example, path)).readAsStringSync(),
+        File(project.absolute(path)).readAsStringSync(),
         content,
         reason:
             '$path is out of date; run `dart run gqlify generate` in example/',

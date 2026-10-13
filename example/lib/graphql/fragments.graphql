@@ -1,0 +1,7 @@
+# Reusable selection: every class that spreads it implements `ProductSummary`.
+fragment ProductSummary on Product {
+  sku
+  name
+  price
+  stock_status
+}

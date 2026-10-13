@@ -7,14 +7,30 @@ import '../source.dart';
 import 'schema.dart';
 import 'type_ref.dart';
 
+/// Builds a [Schema] from parsed SDL [documents] (path, document), reporting
+/// problems to [sink]. Returns `null` if the schema has errors.
+Schema? buildSchema(
+  List<(String, ast.DocumentNode)> documents,
+  DiagnosticSink sink,
+) {
+  final builder = _SdlBuilder(sink);
+  for (final (path, doc) in documents) {
+    builder.addDocument(path, doc);
+  }
+  if (sink.hasErrors) return null;
+  return builder.build();
+}
+
 /// Parses GraphQL SDL [sources] into a [Schema], reporting problems to
 /// [sink]. Returns `null` if the schema has errors.
 Schema? buildSchemaFromSdl(List<GqlifySource> sources, DiagnosticSink sink) {
-  final builder = _SdlBuilder(sink);
+  final documents = <(String, ast.DocumentNode)>[];
   for (final source in sources) {
-    final ast.DocumentNode doc;
     try {
-      doc = lang.parseString(source.content, url: source.path);
+      documents.add((
+        source.path,
+        lang.parseString(source.content, url: source.path),
+      ));
     } on SourceSpanException catch (e) {
       sink.add(
         Diagnostic.error(
@@ -24,12 +40,10 @@ Schema? buildSchemaFromSdl(List<GqlifySource> sources, DiagnosticSink sink) {
           span: e.span,
         ),
       );
-      continue;
     }
-    builder.addDocument(source.path, doc);
   }
   if (sink.hasErrors) return null;
-  return builder.build();
+  return buildSchema(documents, sink);
 }
 
 /// Parses an SDL string; convenience for tests and tools.

@@ -1,4 +1,5 @@
 import 'package:gqlify_example/graphql/cart.graphql.dart';
+import 'package:gqlify_example/graphql/fragments.graphql.dart';
 import 'package:gqlify_example/graphql/products.graphql.dart';
 import 'package:gqlify_example/graphql/schema.graphql.dart';
 import 'package:gqlify_runtime/gqlify_runtime.dart';
@@ -9,7 +10,8 @@ const _product = {
   'sku': 'ABC123',
   'name': 'Espresso machine',
   'price': 249,
-  'stock_quantity': 7,
+  'stock_status': 'IN_STOCK',
+  'created_at': '2026-03-01T10:00:00Z',
   'categories': [
     {'id': '1', 'name': 'Kitchen'},
   ],
@@ -34,7 +36,13 @@ void main() {
     final product = data.product!;
     expect(product.sku, 'ABC123');
     expect(product.price, 249.0); // Float accepts JSON integers.
-    expect(product.stockQuantity, 7); // snake_case -> camelCase.
+    expect(
+      product.stockStatus,
+      StockStatus.inStock,
+    ); // snake_case -> camelCase.
+    expect(product.createdAt, DateTime.utc(2026, 3, 1, 10)); // Custom scalar.
+    final ProductSummary summary = product; // Fragment interface.
+    expect(summary.name, 'Espresso machine');
     expect(product.categories.single.name, 'Kitchen');
 
     final request = transport.requests.single;
@@ -56,17 +64,46 @@ void main() {
     ]);
   });
 
-  test('aliases become field names', () async {
+  test('aliases, input objects and enums', () async {
     respond({
       'data': {
         'results': [
-          {'sku': 'A', 'name': 'a'},
+          {
+            'sku': 'A',
+            'name': 'a',
+            'price': null,
+            'stock_status': 'OUT_OF_STOCK',
+          },
         ],
       },
     });
-    final data = await api.searchProducts(search: 'a', pageSize: 5);
+    final data = await api.searchProducts(
+      filter: const ProductFilter(
+        search: 'a',
+        stockStatus: StockStatus.inStock,
+      ).withNull(minPrice: true),
+      pageSize: 5,
+    );
     expect(data.results.single.sku, 'A');
-    expect(transport.requests.single.variables, {'search': 'a', 'pageSize': 5});
+    expect(data.results.single.stockStatus, StockStatus.outOfStock);
+    expect(transport.requests.single.variables, {
+      'filter': {'search': 'a', 'stock_status': 'IN_STOCK', 'min_price': null},
+      'pageSize': 5,
+    });
+  });
+
+  test('union results', () async {
+    respond({
+      'data': {
+        'search': [
+          {'__typename': 'Category', 'id': '1', 'name': 'Kitchen'},
+          {'__typename': 'Product', ..._product},
+        ],
+      },
+    });
+    final results = (await api.search(text: 'k')).search;
+    expect(results.first, isA<SearchSearch$Category>());
+    expect((results.last as ProductSummary).name, 'Espresso machine');
   });
 
   test('mutation', () async {
@@ -183,6 +220,6 @@ void main() {
     expect(b, a);
     expect(b.hashCode, a.hashCode);
     expect(a.toString(), contains('Espresso machine'));
-    expect(a.toJson()['product'], containsPair('stock_quantity', 7));
+    expect(a.toJson()['product'], containsPair('stock_status', 'IN_STOCK'));
   });
 }

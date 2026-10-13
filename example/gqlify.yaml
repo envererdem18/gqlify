@@ -1,3 +1,10 @@
 schema: lib/graphql/schema.graphql
 documents:
   - lib/graphql/**.graphql
+scalars:
+  DateTime:
+    type: DateTime
+    json_type: String
+    from_json: DateTime.parse
+    to_json: encodeDateTime
+    import: package:gqlify_example/scalars.dart

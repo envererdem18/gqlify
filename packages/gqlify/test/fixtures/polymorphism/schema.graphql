@@ -1,0 +1,53 @@
+interface Node {
+  id: ID!
+}
+
+interface Media implements Node {
+  id: ID!
+  url: String!
+}
+
+type Image implements Node & Media {
+  id: ID!
+  url: String!
+  width: Int!
+}
+
+type Video implements Node & Media {
+  id: ID!
+  url: String!
+  duration: Float!
+}
+
+type Text implements Node {
+  id: ID!
+  body: String!
+}
+
+union Block = Image | Video | Text
+
+interface Titled {
+  title: String
+  author: Node
+}
+
+type Page implements Node & Titled {
+  id: ID!
+  "Narrower than Titled.title (covariant)."
+  title: String!
+  author: Text
+  blocks: [Block!]!
+}
+
+type Article implements Titled {
+  title: String
+  author: Node
+}
+
+type Query {
+  feed: [Block!]!
+  node(id: ID!): Node
+  media: [Media!]!
+  page(id: ID!): Page
+  titled: [Titled!]!
+}

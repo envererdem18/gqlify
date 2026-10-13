@@ -1,9 +1,7 @@
 query GetProduct($sku: ID!) {
   product(sku: $sku) {
-    sku
-    name
-    price
-    stock_quantity
+    ...ProductSummary
+    created_at
     categories {
       id
       name
@@ -22,9 +20,20 @@ query GetCategories($parentId: ID) {
   }
 }
 
-query SearchProducts($search: String, $pageSize: Int) {
-  results: products(search: $search, pageSize: $pageSize) {
-    sku
-    name
+query SearchProducts($filter: ProductFilter, $pageSize: Int) {
+  results: products(filter: $filter, pageSize: $pageSize) {
+    ...ProductSummary
+  }
+}
+
+query Search($text: String!) {
+  search(text: $text) {
+    ... on Product {
+      ...ProductSummary
+    }
+    ... on Category {
+      id
+      name
+    }
   }
 }

@@ -1,0 +1,54 @@
+query ProductDetails($lookup: Lookup!, $currency: Currency = EUR) {
+  product(lookup: $lookup) {
+    ...ProductCard
+    createdAt
+    updatedAt
+    legacyCode
+    usd: price(currency: USD) {
+      amount
+    }
+    localPrice: price(currency: $currency) {
+      amount
+      currency
+    }
+    owner {
+      email
+    }
+  }
+}
+
+query ProductList($filter: ProductFilter, $first: Int) {
+  products(filter: $filter, first: $first) {
+    ...ProductCard
+    related {
+      id
+    }
+  }
+}
+
+query Search($text: String!) {
+  search(text: $text) {
+    ... on Named {
+      name
+    }
+    ... on Product {
+      ...ProductCard
+    }
+    ... on User {
+      id
+      email
+    }
+  }
+}
+
+query GetNode($id: ID!) {
+  node(id: $id) {
+    ...NodeSummary
+  }
+}
+
+mutation UpdateProduct($id: ID!, $input: ProductInput!) {
+  updateProduct(id: $id, input: $input) {
+    ...ProductCard
+  }
+}

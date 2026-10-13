@@ -4,8 +4,9 @@ type Product {
   name: String!
   "Unit price in the store currency; null when not for sale."
   price: Float
-  stock_quantity: Int!
+  stock_status: StockStatus!
   categories: [Category!]!
+  created_at: DateTime!
   "Deprecated: use categories."
   category: Category @deprecated(reason: "Use categories.")
 }
@@ -28,10 +29,28 @@ type Cart {
   total_quantity: Float!
 }
 
+enum StockStatus {
+  IN_STOCK
+  OUT_OF_STOCK
+}
+
+"""An ISO-8601 timestamp."""
+scalar DateTime
+
+input ProductFilter {
+  search: String
+  stock_status: StockStatus
+  min_price: Float
+  category_ids: [ID!]
+}
+
+union SearchResult = Product | Category
+
 type Query {
   product(sku: ID!): Product
   categories(parentId: ID): [Category!]!
-  products(search: String, pageSize: Int = 20): [Product!]!
+  products(filter: ProductFilter, pageSize: Int = 20): [Product!]!
+  search(text: String!): [SearchResult!]!
 }
 
 type Mutation {

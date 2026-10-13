@@ -1,0 +1,106 @@
+"""Anything with a global identifier."""
+interface Node {
+  id: ID!
+}
+
+interface Named {
+  name: String!
+}
+
+type Product implements Node & Named {
+  id: ID!
+  name: String!
+  price(currency: Currency = EUR): Money
+  status: ProductStatus!
+  tags: [String!]!
+  createdAt: DateTime!
+  updatedAt: DateTime
+  related(first: Int = 3): [Product!]!
+  owner: User
+  "Old field."
+  legacyCode: String @deprecated(reason: "Use id.")
+}
+
+type Category implements Node & Named {
+  id: ID!
+  name: String!
+  children: [Category!]!
+}
+
+type User implements Node {
+  id: ID!
+  email: String!
+}
+
+type Money {
+  amount: Float!
+  currency: Currency!
+}
+
+union SearchResult = Product | Category | User
+
+enum ProductStatus {
+  ACTIVE
+  ARCHIVED
+  "Not yet visible."
+  DRAFT @deprecated(reason: "Drafts are no longer used.")
+}
+
+enum Currency {
+  EUR
+  USD
+}
+
+scalar DateTime
+
+input ProductFilter {
+  search: String
+  status: ProductStatus = ACTIVE
+  minPrice: Float
+  tags: [String!]
+  createdAfter: DateTime
+  price: PriceRange
+}
+
+input PriceRange {
+  min: Float
+  max: Float
+}
+
+input ProductInput {
+  name: String!
+  description: String
+  status: ProductStatus!
+  tags: [String!] = []
+}
+
+input Lookup @oneOf {
+  id: ID
+  sku: String
+}
+
+type Query {
+  node(id: ID!): Node
+  product(lookup: Lookup!): Product
+  products(filter: ProductFilter, first: Int = 20): [Product!]!
+  search(text: String!): [SearchResult!]!
+}
+
+type Mutation {
+  updateProduct(id: ID!, input: ProductInput!): Product!
+}
+
+"""Recursive filters."""
+input TreeFilter {
+  and: [TreeFilter!]
+  not: TreeFilter
+  "Reserved word as a field name."
+  in: [ID!]
+}
+
+enum Keyword {
+  class
+  VALUES
+  default
+  IN_STOCK
+}

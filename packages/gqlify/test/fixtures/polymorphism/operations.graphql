@@ -1,0 +1,42 @@
+query Feed {
+  feed {
+    kind: __typename
+    ...MediaFields
+    ... on Text {
+      body
+    }
+  }
+}
+
+query NodeById($id: ID!, $withText: Boolean!) {
+  node(id: $id) {
+    id
+    ... on Media {
+      ...MediaFields
+    }
+    ...TextBody @include(if: $withText)
+  }
+}
+
+query MediaList {
+  media {
+    id
+    url
+    ... on Video {
+      duration
+    }
+  }
+}
+
+query PageById($id: ID!) {
+  page(id: $id) {
+    id
+    ...PageFields
+  }
+}
+
+query TitledList {
+  titled {
+    ...TitledFields
+  }
+}

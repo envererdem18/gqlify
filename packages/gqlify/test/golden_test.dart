@@ -20,27 +20,34 @@ void main() {
       final files = dir.listSync().whereType<File>().toList();
       String read(String name) =>
           File(p.join(dir.path, name)).readAsStringSync();
+      final configFile = File(p.join(dir.path, 'gqlify.yaml'));
+      final sink = DiagnosticSink();
+      final config = configFile.existsSync()
+          ? GqlifyConfig.parse(configFile.readAsStringSync(), sink)!
+          : GqlifyConfig(schema: ['schema.graphql']);
       final result = GqlifyEngine().generate(
         GenerationInput(
-          config: GqlifyConfig(schema: ['schema.graphql']),
+          config: config,
+          schema: [for (final s in config.schema) GqlifySource(s, read(s))],
+          documents: [
+            for (final f in files)
+              if (f.path.endsWith('.graphql') &&
+                  !config.schema.contains(p.basename(f.path)))
+                GqlifySource(p.basename(f.path), f.readAsStringSync()),
+          ],
           // Format like `dart format` would in this package.
           format: FormatSettings.fromProjectFiles(
             pubspecYaml: File('pubspec.yaml').readAsStringSync(),
           ),
-          schema: [GqlifySource('schema.graphql', read('schema.graphql'))],
-          documents: [
-            for (final f in files)
-              if (f.path.endsWith('.graphql') &&
-                  p.basename(f.path) != 'schema.graphql')
-                GqlifySource(p.basename(f.path), f.readAsStringSync()),
-          ],
         ),
       );
       expect(result.diagnostics.where((d) => d.isError), isEmpty);
 
+      // Hand-written Dart files (e.g. scalar codecs) are not outputs.
       final existing = {
         for (final f in files)
-          if (f.path.endsWith('.dart')) p.basename(f.path),
+          if (f.path.endsWith('.graphql.dart') || f.path.endsWith('.json.dart'))
+            p.basename(f.path),
       };
       if (update) {
         for (final name in existing.difference(result.outputs.keys.toSet())) {

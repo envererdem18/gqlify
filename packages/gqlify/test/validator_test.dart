@@ -130,6 +130,37 @@ void main() {
     ]);
   });
 
+  test('warns about deprecated fields, arguments and enum values', () {
+    final sink = DiagnosticSink();
+    final schema = parseSchema('''
+      enum E { A B @deprecated(reason: "Use A.") }
+      input I { x: Int @deprecated(reason: "Gone.") y: Int }
+      type Query {
+        old: Int @deprecated(reason: "Use new.")
+        f(e: E, i: I, legacy: Int @deprecated): Int
+      }
+    ''', sink)!;
+    final set = DocumentSet.parse([
+      GqlifySource(
+        'a.graphql',
+        'query Q { old f(e: B, i: {x: 1}, legacy: 1) }',
+      ),
+    ], sink);
+    validateDocuments(schema, set, sink);
+    final diagnostics = sink.sorted();
+    expect(diagnostics.every((d) => d.severity == Severity.warning), isTrue);
+    expect(diagnostics.map((d) => d.code), [
+      'deprecated-field',
+      'deprecated-enum-value',
+      'deprecated-input-field',
+      'deprecated-argument',
+    ]);
+    expect(
+      diagnostics.first.message,
+      'Field "Query.old" is deprecated: Use new.',
+    );
+  });
+
   test('locates diagnostics', () {
     final d = validate({'lib/q.graphql': 'query Q {\n  nope\n}'}).single;
     expect(

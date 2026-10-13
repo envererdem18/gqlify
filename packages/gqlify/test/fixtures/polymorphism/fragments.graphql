@@ -1,0 +1,35 @@
+# Polymorphic fragment on an interface.
+fragment MediaFields on Media {
+  url
+  ... on Image {
+    width
+  }
+}
+
+fragment TextBody on Text {
+  body
+}
+
+# Nested polymorphism inside a fragment.
+fragment PageFields on Page {
+  title
+  blocks {
+    ... on Text {
+      ...TextBody
+    }
+    ... on Media {
+      ...MediaFields
+    }
+  }
+}
+
+# Covariant fields: Page narrows title and author.
+fragment TitledFields on Titled {
+  title
+  author {
+    id
+  }
+  ... on Page {
+    id
+  }
+}

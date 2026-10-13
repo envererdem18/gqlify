@@ -5,11 +5,12 @@ import 'package:dart_style/dart_style.dart';
 import 'config.dart';
 import 'diagnostics.dart';
 import 'documents/document_set.dart';
+import 'documents/typename.dart';
 import 'documents/validator.dart';
 import 'emit/dart_emitter.dart';
 import 'emit/formatter.dart';
 import 'ir/builder.dart';
-import 'schema/sdl_builder.dart';
+import 'schema/loader.dart';
 import 'source.dart';
 
 /// Everything one generation depends on. Adapters gather it; the engine does
@@ -65,24 +66,23 @@ final class GqlifyEngine {
     final sink = DiagnosticSink();
     final config = input.config;
 
-    if (config.mode != GenerationMode.operations) {
-      sink.error(
-        'unsupported-feature',
-        'mode "${config.mode.yamlName}" is not supported by this version of '
-            'gqlify yet; use "operations".',
-        path: GqlifyConfig.fileName,
-      );
-      return GenerationResult(const {}, sink.sorted());
-    }
-
-    final schema = buildSchemaFromSdl(input.schema, sink);
+    final schema = loadSchema(input.schema, sink);
     if (schema == null) return GenerationResult(const {}, sink.sorted());
 
-    final documents = DocumentSet.parse(input.documents, sink);
+    // Schema-only generation ignores operation documents entirely.
+    final documents = DocumentSet.parse(
+      config.mode.includesOperations ? input.documents : const [],
+      sink,
+    );
     validateDocuments(schema, documents, sink);
     if (sink.hasErrors) return GenerationResult(const {}, sink.sorted());
 
-    final model = buildModel(schema, documents, config, sink);
+    final model = buildModel(
+      schema,
+      addTypenames(schema, documents),
+      config,
+      sink,
+    );
     if (sink.hasErrors) return GenerationResult(const {}, sink.sorted());
 
     final formatter = GeneratedCodeFormatter(input.format);
