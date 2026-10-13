@@ -1,0 +1,22 @@
+query reservedWords($in: ID!, $document: String, $flag: Boolean = false, $ids: [ID!]) {
+  item(in: $in, document: $document, flag: $flag, ids: $ids) {
+    class
+    toJson
+    hashCode
+    in
+    alias: class
+    matrix
+    sparse {
+      in
+      sparse { in }
+    }
+    meta
+    described
+    skipped: in @skip(if: $flag)
+    kept: in @include(if: true)
+  }
+}
+
+query ListItems {
+  items { in }
+}

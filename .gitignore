@@ -1,0 +1,8 @@
+.dart_tool/
+build/
+pubspec_overrides.yaml
+*.iml
+.idea/
+
+# Local working notes shared with the AI agent; never committed.
+docs/

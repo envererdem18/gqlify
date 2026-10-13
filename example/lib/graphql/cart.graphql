@@ -1,0 +1,10 @@
+mutation AddToCart($cartId: ID!, $sku: ID!, $quantity: Float!) {
+  addToCart(cartId: $cartId, sku: $sku, quantity: $quantity) {
+    id
+    total_quantity
+    items {
+      sku
+      quantity
+    }
+  }
+}

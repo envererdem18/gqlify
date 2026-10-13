@@ -1,0 +1,3 @@
+schema: lib/graphql/schema.graphql
+documents:
+  - lib/graphql/**.graphql

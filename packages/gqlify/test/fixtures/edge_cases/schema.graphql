@@ -1,0 +1,18 @@
+scalar JSON
+
+type Item {
+  class: Int
+  toJson: String
+  hashCode: Int
+  in: String!
+  matrix: [[Float!]]!
+  sparse: [[Item]]
+  meta: JSON
+  "Line one.\nLine two with */ and $dollar."
+  described: String @deprecated(reason: "Don't use 'described'.")
+}
+
+type Query {
+  item(in: ID!, document: String, flag: Boolean = true, ids: [ID!]): Item
+  items: [Item!]!
+}

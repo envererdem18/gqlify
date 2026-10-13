@@ -1,0 +1,30 @@
+query GetProduct($sku: ID!) {
+  product(sku: $sku) {
+    sku
+    name
+    price
+    stock_quantity
+    categories {
+      id
+      name
+    }
+  }
+}
+
+query GetCategories($parentId: ID) {
+  categories(parentId: $parentId) {
+    id
+    name
+    children {
+      id
+      name
+    }
+  }
+}
+
+query SearchProducts($search: String, $pageSize: Int) {
+  results: products(search: $search, pageSize: $pageSize) {
+    sku
+    name
+  }
+}

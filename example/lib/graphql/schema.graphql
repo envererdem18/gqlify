@@ -1,0 +1,39 @@
+"""A purchasable product."""
+type Product {
+  sku: ID!
+  name: String!
+  "Unit price in the store currency; null when not for sale."
+  price: Float
+  stock_quantity: Int!
+  categories: [Category!]!
+  "Deprecated: use categories."
+  category: Category @deprecated(reason: "Use categories.")
+}
+
+type Category {
+  id: ID!
+  name: String!
+  children: [Category!]!
+}
+
+type CartItem {
+  sku: ID!
+  quantity: Float!
+  product: Product
+}
+
+type Cart {
+  id: ID!
+  items: [CartItem!]!
+  total_quantity: Float!
+}
+
+type Query {
+  product(sku: ID!): Product
+  categories(parentId: ID): [Category!]!
+  products(search: String, pageSize: Int = 20): [Product!]!
+}
+
+type Mutation {
+  addToCart(cartId: ID!, sku: ID!, quantity: Float!): Cart!
+}

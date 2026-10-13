@@ -1,0 +1,13 @@
+name: gqlify_workspace
+publish_to: none
+
+environment:
+  sdk: ^3.6.0
+
+workspace:
+  - packages/gqlify
+  - packages/gqlify_runtime
+  - example
+
+dev_dependencies:
+  lints: ^6.0.0
