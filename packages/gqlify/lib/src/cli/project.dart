@@ -4,7 +4,8 @@ import 'package:glob/glob.dart';
 import 'package:glob/list_local_fs.dart';
 import 'package:path/path.dart' as p;
 
-import '../config.dart';
+import '../config.dart' hide resolveConfig;
+import '../config.dart' as config_lib show resolveConfig;
 import '../diagnostics.dart';
 import '../emit/formatter.dart';
 import '../engine.dart';
@@ -32,24 +33,16 @@ final class Project {
   String relative(String absolutePath) =>
       normalizePath(p.relative(absolutePath, from: root));
 
-  /// Raw content of `gqlify.yaml`, or `null` if it does not exist.
-  String? readConfigText() {
-    final file = File(p.join(root, GqlifyConfig.fileName));
-    return file.existsSync() ? file.readAsStringSync() : null;
-  }
-
-  /// Reads `gqlify.yaml`; problems are reported to [sink].
-  GqlifyConfig? loadConfig(DiagnosticSink sink) {
-    final file = File(p.join(root, GqlifyConfig.fileName));
-    if (!file.existsSync()) {
-      sink.error(
-        'missing-config',
-        'No ${GqlifyConfig.fileName} found in $root.',
+  /// Resolves the configuration from `gqlify.yaml` or `pubspec.yaml`.
+  ResolvedConfig? resolveConfig(DiagnosticSink sink) =>
+      config_lib.resolveConfig(
+        gqlifyYaml: _readOptional(GqlifyConfig.fileName),
+        pubspecYaml: _readOptional('pubspec.yaml'),
+        sink: sink,
       );
-      return null;
-    }
-    return GqlifyConfig.parse(file.readAsStringSync(), sink);
-  }
+
+  /// Reads the configuration; problems are reported to [sink].
+  GqlifyConfig? loadConfig(DiagnosticSink sink) => resolveConfig(sink)?.config;
 
   /// Reads the schema and discovers and reads operation documents.
   GenerationInput? loadInput(GqlifyConfig config, DiagnosticSink sink) {

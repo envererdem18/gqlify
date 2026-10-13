@@ -157,6 +157,23 @@ final class GqlifyConfig {
     DiagnosticSink sink, {
     String path = fileName,
   }) {
+    final YamlNode root;
+    try {
+      root = loadYamlNode(yaml, sourceUrl: Uri.file(path));
+    } on YamlException catch (e) {
+      sink.add(Diagnostic.error('invalid-config', e.message, path: path));
+      return null;
+    }
+    return parseNode(root, sink, path: path);
+  }
+
+  /// Parses an already loaded settings map, e.g. the `gqlify:` section of
+  /// `pubspec.yaml`.
+  static GqlifyConfig? parseNode(
+    YamlNode root,
+    DiagnosticSink sink, {
+    required String path,
+  }) {
     var failed = false;
     void fail(String message, [YamlNode? node]) {
       failed = true;
@@ -170,15 +187,8 @@ final class GqlifyConfig {
       );
     }
 
-    final Object? root;
-    try {
-      root = loadYamlNode(yaml, sourceUrl: Uri.file(path));
-    } on YamlException catch (e) {
-      sink.add(Diagnostic.error('invalid-config', e.message, path: path));
-      return null;
-    }
     if (root is! YamlMap) {
-      fail('Expected a map of settings.');
+      fail('Expected a map of settings.', root);
       return null;
     }
     final map = root;
@@ -332,4 +342,61 @@ final class GqlifyConfig {
       import: text('import'),
     );
   }
+}
+
+/// The configuration of a package and the text it was read from.
+typedef ResolvedConfig = ({GqlifyConfig config, String digestSource});
+
+/// Locates and parses the configuration: `gqlify.yaml`, or else the
+/// `gqlify:` section of `pubspec.yaml` (convenient for `build_runner`, which
+/// always sees `pubspec.yaml`). Having both is an error. Both adapters use
+/// this function so that they always agree.
+///
+/// `digestSource` covers exactly the settings, for cache keys.
+ResolvedConfig? resolveConfig({
+  required String? gqlifyYaml,
+  required String? pubspecYaml,
+  required DiagnosticSink sink,
+}) {
+  YamlNode? section;
+  if (pubspecYaml != null) {
+    try {
+      final pubspec = loadYamlNode(
+        pubspecYaml,
+        sourceUrl: Uri.file('pubspec.yaml'),
+      );
+      if (pubspec is YamlMap) section = pubspec.nodes['gqlify'];
+    } on YamlException {
+      // pub reports invalid pubspecs; treat as having no section.
+    }
+  }
+  if (gqlifyYaml != null && section != null) {
+    sink.add(
+      Diagnostic.error(
+        'ambiguous-config',
+        'Configuration found in both gqlify.yaml and the "gqlify:" section of '
+            'pubspec.yaml. Keep only one.',
+        path: GqlifyConfig.fileName,
+      ),
+    );
+    return null;
+  }
+  if (gqlifyYaml != null) {
+    final config = GqlifyConfig.parse(gqlifyYaml, sink);
+    return config == null ? null : (config: config, digestSource: gqlifyYaml);
+  }
+  if (section != null) {
+    final config = GqlifyConfig.parseNode(section, sink, path: 'pubspec.yaml');
+    return config == null
+        ? null
+        : (config: config, digestSource: jsonEncode(section.value));
+  }
+  sink.add(
+    Diagnostic.error(
+      'missing-config',
+      'No gqlify configuration: add gqlify.yaml or a "gqlify:" section to '
+          'pubspec.yaml.',
+    ),
+  );
+  return null;
 }

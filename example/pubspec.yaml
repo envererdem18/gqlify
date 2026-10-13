@@ -10,6 +10,22 @@ dependencies:
   gqlify_runtime: any
 
 dev_dependencies:
+  build_runner: ^2.10.0
   gqlify: any
   lints: ^6.0.0
   test: ^1.25.0
+
+# gqlify settings (equivalent to a gqlify.yaml file). Kept in pubspec.yaml so
+# that both `dart run gqlify generate` and `dart run build_runner build` see
+# them without extra build.yaml configuration.
+gqlify:
+  schema: lib/graphql/schema.graphql
+  documents:
+    - lib/graphql/**.graphql
+  scalars:
+    DateTime:
+      type: DateTime
+      json_type: String
+      from_json: DateTime.parse
+      to_json: encodeDateTime
+      import: package:gqlify_example/scalars.dart

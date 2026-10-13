@@ -1,7 +1,7 @@
 # gqlify architecture
 
 This document records how gqlify is structured and why. It is updated as each
-milestone lands. **Current state: Milestone C (correctness-first CLI caching).**
+milestone lands. **Current state: Milestone D (build_runner support).**
 
 ## Packages
 
@@ -77,7 +77,15 @@ checks that both inputs generate byte-identical code, apart from the source
 path in the header. Default values are parsed with the GraphQL parser;
 `isOneOf` maps to `@oneOf`; built-in directives are not redefined.
 
-### Configuration (`gqlify.yaml`)
+### Configuration (`gqlify.yaml` or `pubspec.yaml`)
+
+Settings are read from `gqlify.yaml` or from the `gqlify:` section of
+`pubspec.yaml`. Having both is an `ambiguous-config` error. One function
+(`resolveConfig`) locates and parses them for both adapters.
+
+`pubspec.yaml` is supported because it is always visible to `build_runner`,
+while root files such as `gqlify.yaml` are not part of build_runner's default
+sources.
 
 | Key | Meaning |
 | --- | --- |
@@ -401,6 +409,100 @@ Remaining risk: the formatter bundled with the SDK can differ from the
   in `.graphql.dart`/`.gql.dart`/`.json.dart` and it starts with the
   generated-code marker. Stale outputs are found even with no cache at all.
 
+## build_runner adapter (`builder/gqlify_builder.dart`)
+
+### Builder shape
+
+The builder is a **plain per-input builder** with
+`build_extensions: {.graphql: [.graphql.dart], .gql: [.gql.dart], .json: [.json.dart]}`.
+It is applied to dependents and runs on `lib/**` by default.
+
+Every output is owned by exactly one input:
+
+- a document's library is owned by the document;
+- the schema library is owned by the first schema file.
+
+No global aggregate file exists; the extension-based client design made this
+possible (see "Client methods as extensions"). Inputs that are neither
+documents nor the first schema file (unrelated `.json` files, extra schema
+files) produce nothing.
+
+### Dependency tracking
+
+Each step reads, through `BuildStep`:
+
+- the configuration (`pubspec.yaml`, `gqlify.yaml` if visible)
+- every schema file
+- every document found with `findAssets` for the configured globs
+- `analysis_options.yaml` if visible
+
+`build_runner` therefore records all of them as dependencies. A step's output
+can depend on any document (fragments, global validation, name collisions),
+so editing any document reruns every step. Unchanged outputs are recognized
+by digest and do not invalidate anything downstream.
+
+The builder reads nothing behind build_runner's back. There is one exception,
+used only to *refuse to proceed*, never as an input:
+
+- **`gqlify.yaml` exists on disk but is invisible:** the builder warns once
+  and stays inactive, so CLI-only users can still run build_runner for other
+  generators.
+- **`analysis_options.yaml` has invisible `formatter:` settings:** the
+  builder fails with instructions instead of silently formatting differently
+  from the CLI.
+
+### One engine run per build
+
+Steps share results through a `Resource`: a map from the input digest to
+`Future<GenerationResult>`. The engine therefore runs once per distinct input
+set per build, not once per step. A bounded in-memory formatting memo keeps
+formatter results across `watch` rebuilds. Formatting is a pure function of
+the memo key, so sharing it cannot change results. The builder keeps **no
+persistent cache**: build_runner owns incrementality in `.dart_tool/build/`.
+
+### Diagnostics
+
+Every diagnostic is logged by exactly one step: the step whose input
+contains it. Diagnostics located elsewhere (configuration, other schema
+files) go to the schema step. Errors make the build fail and no output is
+written.
+
+On a failure, build_runner removes the outputs of that build until the error
+is fixed. The CLI keeps the previous files instead. This is the one
+documented behavioral difference between the adapters, and it is inherent to
+build_runner owning its outputs.
+
+### Equivalence with the CLI
+
+Both adapters build the same `GenerationInput`:
+
+- the same configuration resolution
+- the same document globs
+- schema files in configured order
+- documents sorted by path
+- format settings from the same files
+
+They call the same engine, so outputs are byte-identical. This is checked at
+three levels:
+
+- **`builder_test.dart`** (`build_test`): outputs equal the engine's for the
+  shop fixture (via `gqlify.yaml`, via `pubspec.yaml`, and with
+  `analysis_options.yaml`). It also checks schema-only mode, that each error
+  is reported once, and the tracked inputs of a step.
+- **`build_runner_integration_test.dart`** (tag `integration`):
+  - Runs the real `build_runner build` and compares it with a clean CLI
+    generation.
+  - Runs the real `build_runner watch` and, after each of these, compares
+    again with a clean CLI generation:
+    - an operation change
+    - a shared fragment change
+    - a schema change
+    - a new document in a new directory
+    - an invalid document (both adapters must fail)
+    - deleting that document (recovery)
+- **CI** runs `build_runner build` in `example/` and fails if any committed
+  (CLI-generated) file changes.
+
 ## Incremental caching (CLI)
 
 **Invariant:** `GeneratedFiles(incremental) == GeneratedFiles(clean)`, for the
@@ -596,7 +698,7 @@ phase (discovery, hashing, scan, engine phases, write, verify, cache).
 - **`example/`:** the generated API is used like an application would use
   it, and its outputs are checked for freshness.
 
-## Known limitations (after Milestone C)
+## Known limitations (after Milestone D)
 
 - **Subscriptions:** not supported (`unsupported-subscription`).
 - **Unknown enum values:** `$unknown` cannot be encoded, so a response
@@ -615,4 +717,10 @@ phase (discovery, hashing, scan, engine phases, write, verify, cache).
   successful run, so undoing an edit reformats once.
 - **Unverified on this machine:** Windows file locking and path handling are
   covered by CI only.
-- **Not yet built:** the `build_runner` builder (Milestone D).
+- **Failed builds under build_runner:** they remove generated files until
+  fixed (see build_runner adapter). The CLI keeps them.
+- **Rerun scope:** under build_runner every step depends on every document,
+  so one edit reruns all steps. The engine still runs only once, and
+  unchanged outputs do not propagate.
+- **`analysis_options.yaml` includes:** only the top-level file's
+  `formatter:` section is read, by both adapters.

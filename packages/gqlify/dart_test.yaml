@@ -1,0 +1,6 @@
+tags:
+  # Incremental-vs-clean equivalence tests (fast enough for every run).
+  differential:
+  # Real build_runner processes; slow (compiles build scripts).
+  integration:
+    timeout: 6x

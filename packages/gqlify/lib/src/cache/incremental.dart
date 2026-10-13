@@ -3,7 +3,6 @@ import 'dart:io';
 
 import '../cli/output_sync.dart';
 import '../cli/project.dart';
-import '../config.dart';
 import '../diagnostics.dart';
 import '../engine.dart';
 import 'cache_store.dart';
@@ -137,12 +136,10 @@ final class IncrementalGenerator {
 
     // 1. Inputs.
     final sink = DiagnosticSink();
-    final configText = project.readConfigText();
-    final config = configText == null
+    final resolved = project.resolveConfig(sink);
+    final input = resolved == null
         ? null
-        : GqlifyConfig.parse(configText, sink);
-    if (configText == null) project.loadConfig(sink); // Reports missing-config.
-    final input = config == null ? null : project.loadInput(config, sink);
+        : project.loadInput(resolved.config, sink);
     if (input == null) return fail(sink.sorted(), 'not used');
     lap('discovery');
 
@@ -152,7 +149,7 @@ final class IncrementalGenerator {
       for (final s in [...input.schema, ...input.documents])
         s.path: sha256Text(s.content),
     };
-    final configDigest = sha256Text(configText!);
+    final configDigest = sha256Text(resolved!.digestSource);
     final inputKey = sha256Text(
       jsonEncode({
         'cache': Manifest.formatVersion,

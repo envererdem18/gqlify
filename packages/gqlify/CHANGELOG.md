@@ -1,3 +1,15 @@
+## 0.1.0-dev.4 (unreleased)
+
+Milestone D: build_runner support.
+
+- `build_runner` builder (`package:gqlify/builder.dart`, auto-applied):
+  per-input outputs, all inputs tracked through `BuildStep`, one engine run
+  per build, byte-identical to the CLI.
+- Configuration may live in the `gqlify:` section of `pubspec.yaml` (visible
+  to build_runner without extra setup); both sources at once is an error.
+- `build_test` unit tests and real `build_runner build`/`watch` integration
+  tests compared against clean CLI generation.
+
 ## 0.1.0-dev.3 (unreleased)
 
 Milestone C: correctness-first CLI caching.

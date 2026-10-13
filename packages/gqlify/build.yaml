@@ -1,0 +1,15 @@
+builders:
+  gqlify:
+    import: "package:gqlify/builder.dart"
+    builder_factories: ["gqlifyBuilder"]
+    build_extensions:
+      .graphql: [.graphql.dart]
+      .gql: [.gql.dart]
+      .json: [.json.dart]
+    auto_apply: dependents
+    build_to: source
+    defaults:
+      generate_for:
+        - lib/**.graphql
+        - lib/**.gql
+        - lib/**.json

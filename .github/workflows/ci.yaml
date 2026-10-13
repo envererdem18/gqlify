@@ -33,6 +33,12 @@ jobs:
       - name: Test example
         run: dart test
         working-directory: example
-      - name: Generated example is up to date
+      - name: Generated example is up to date (CLI)
         run: dart run gqlify check
+        working-directory: example
+      - name: build_runner produces the same files as the CLI
+        shell: bash
+        run: |
+          dart run build_runner build
+          git diff --exit-code -- lib
         working-directory: example
