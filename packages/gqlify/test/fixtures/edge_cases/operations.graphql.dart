@@ -157,14 +157,11 @@ final class ReservedWordsData {
 
   factory ReservedWordsData.fromJson(Map<String, Object?> json) =>
       ReservedWordsData(
-        item: switch (gqlifyRead<Map<String, Object?>?>(
+        item: gqlifyField(
           json,
           'item',
-          'ReservedWordsData',
-        )) {
-          null => null,
-          final v0 => ReservedWordsItem.fromJson(v0),
-        },
+          const GqlifyNullable(GqlifyObject(ReservedWordsItem.fromJson)),
+        ),
       );
 
   final ReservedWordsItem? item;
@@ -202,55 +199,37 @@ final class ReservedWordsItem {
   factory ReservedWordsItem.fromJson(
     Map<String, Object?> json,
   ) => ReservedWordsItem(
-    $class: gqlifyRead<int?>(json, 'class', 'ReservedWordsItem'),
-    $toJson: gqlifyRead<String?>(json, 'toJson', 'ReservedWordsItem'),
-    $hashCode: gqlifyRead<int?>(json, 'hashCode', 'ReservedWordsItem'),
-    $in: gqlifyRead<String>(json, 'in', 'ReservedWordsItem'),
-    alias: gqlifyRead<int?>(json, 'alias', 'ReservedWordsItem'),
-    matrix: [
-      for (final e0 in gqlifyRead<List<Object?>>(
-        json,
-        'matrix',
-        'ReservedWordsItem',
-      ))
-        switch (gqlifyCast<List<Object?>?>(e0, 'ReservedWordsItem.matrix[]')) {
-          null => null,
-          final v1 => [
-            for (final e1 in v1)
-              gqlifyCast<num>(e1, 'ReservedWordsItem.matrix[][]').toDouble(),
-          ],
-        },
-    ],
-    sparse: switch (gqlifyRead<List<Object?>?>(
+    $class: gqlifyField(json, 'class', const GqlifyNullable(gqlifyInt)),
+    $toJson: gqlifyField(json, 'toJson', const GqlifyNullable(gqlifyString)),
+    $hashCode: gqlifyField(json, 'hashCode', const GqlifyNullable(gqlifyInt)),
+    $in: gqlifyField(json, 'in', gqlifyString),
+    alias: gqlifyField(json, 'alias', const GqlifyNullable(gqlifyInt)),
+    matrix: gqlifyField(
+      json,
+      'matrix',
+      const GqlifyList(GqlifyNullable(GqlifyList(gqlifyDouble))),
+    ),
+    sparse: gqlifyField(
       json,
       'sparse',
-      'ReservedWordsItem',
-    )) {
-      null => null,
-      final v0 => [
-        for (final e0 in v0)
-          switch (gqlifyCast<List<Object?>?>(
-            e0,
-            'ReservedWordsItem.sparse[]',
-          )) {
-            null => null,
-            final v1 => [
-              for (final e1 in v1)
-                switch (gqlifyCast<Map<String, Object?>?>(
-                  e1,
-                  'ReservedWordsItem.sparse[][]',
-                )) {
-                  null => null,
-                  final v2 => ReservedWordsItemSparse.fromJson(v2),
-                },
-            ],
-          },
-      ],
-    },
-    meta: gqlifyRead<Object?>(json, 'meta', 'ReservedWordsItem'),
-    described: gqlifyRead<String?>(json, 'described', 'ReservedWordsItem'),
-    skipped: gqlifyRead<String?>(json, 'skipped', 'ReservedWordsItem'),
-    kept: gqlifyRead<String>(json, 'kept', 'ReservedWordsItem'),
+      const GqlifyNullable(
+        GqlifyList(
+          GqlifyNullable(
+            GqlifyList(
+              GqlifyNullable(GqlifyObject(ReservedWordsItemSparse.fromJson)),
+            ),
+          ),
+        ),
+      ),
+    ),
+    meta: gqlifyField(json, 'meta', const GqlifyNullable(gqlifyJson)),
+    described: gqlifyField(
+      json,
+      'described',
+      const GqlifyNullable(gqlifyString),
+    ),
+    skipped: gqlifyField(json, 'skipped', const GqlifyNullable(gqlifyString)),
+    kept: gqlifyField(json, 'kept', gqlifyString),
   );
 
   final int? $class;
@@ -343,33 +322,22 @@ final class ReservedWordsItemSparse {
 
   factory ReservedWordsItemSparse.fromJson(Map<String, Object?> json) =>
       ReservedWordsItemSparse(
-        $in: gqlifyRead<String>(json, 'in', 'ReservedWordsItemSparse'),
-        sparse: switch (gqlifyRead<List<Object?>?>(
+        $in: gqlifyField(json, 'in', gqlifyString),
+        sparse: gqlifyField(
           json,
           'sparse',
-          'ReservedWordsItemSparse',
-        )) {
-          null => null,
-          final v0 => [
-            for (final e0 in v0)
-              switch (gqlifyCast<List<Object?>?>(
-                e0,
-                'ReservedWordsItemSparse.sparse[]',
-              )) {
-                null => null,
-                final v1 => [
-                  for (final e1 in v1)
-                    switch (gqlifyCast<Map<String, Object?>?>(
-                      e1,
-                      'ReservedWordsItemSparse.sparse[][]',
-                    )) {
-                      null => null,
-                      final v2 => ReservedWordsItemSparseSparse.fromJson(v2),
-                    },
-                ],
-              },
-          ],
-        },
+          const GqlifyNullable(
+            GqlifyList(
+              GqlifyNullable(
+                GqlifyList(
+                  GqlifyNullable(
+                    GqlifyObject(ReservedWordsItemSparseSparse.fromJson),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
       );
 
   final String $in;
@@ -410,9 +378,7 @@ final class ReservedWordsItemSparseSparse {
   const ReservedWordsItemSparseSparse({required this.$in});
 
   factory ReservedWordsItemSparseSparse.fromJson(Map<String, Object?> json) =>
-      ReservedWordsItemSparseSparse(
-        $in: gqlifyRead<String>(json, 'in', 'ReservedWordsItemSparseSparse'),
-      );
+      ReservedWordsItemSparseSparse($in: gqlifyField(json, 'in', gqlifyString));
 
   final String $in;
 
@@ -435,16 +401,11 @@ final class ListItemsData {
   const ListItemsData({required this.items});
 
   factory ListItemsData.fromJson(Map<String, Object?> json) => ListItemsData(
-    items: [
-      for (final e0 in gqlifyRead<List<Object?>>(
-        json,
-        'items',
-        'ListItemsData',
-      ))
-        ListItemsItems.fromJson(
-          gqlifyCast<Map<String, Object?>>(e0, 'ListItemsData.items[]'),
-        ),
-    ],
+    items: gqlifyField(
+      json,
+      'items',
+      const GqlifyList(GqlifyObject(ListItemsItems.fromJson)),
+    ),
   );
 
   final List<ListItemsItems> items;
@@ -470,7 +431,7 @@ final class ListItemsItems {
   const ListItemsItems({required this.$in});
 
   factory ListItemsItems.fromJson(Map<String, Object?> json) =>
-      ListItemsItems($in: gqlifyRead<String>(json, 'in', 'ListItemsItems'));
+      ListItemsItems($in: gqlifyField(json, 'in', gqlifyString));
 
   final String $in;
 

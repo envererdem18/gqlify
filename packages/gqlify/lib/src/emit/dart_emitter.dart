@@ -474,8 +474,7 @@ final class _LibraryEmitter {
       ..writeln()
       ..writeln('  factory $name.fromJson(Map<String, Object?> json) =>')
       ..writeln(
-        '      switch (gqlifyRead<String>(json, '
-        "'__typename', ${dartString(name)})) {",
+        "      switch (gqlifyField(json, '__typename', gqlifyString)) {",
       );
     for (final MapEntry(key: type, value: variant) in model.variants.entries) {
       out.writeln(
@@ -534,10 +533,7 @@ final class _LibraryEmitter {
         '  factory $name.fromJson(Map<String, Object?> json) => $name(',
       );
     for (final f in fields) {
-      out.writeln(
-        '    ${f.dartName}: '
-        '${_decode(_FieldReader(f.responseKey, name), f.type, 0)},',
-      );
+      out.writeln('    ${f.dartName}: ${_decodeField(f.responseKey, f.type)},');
     }
     out
       ..writeln('  );')
@@ -623,77 +619,59 @@ final class _LibraryEmitter {
 // -----------------------------------------------------------------------------
 // Codecs
 
-/// Source of a JSON value being decoded: a map entry or a list element.
-sealed class _Reader {
-  /// Expression reading the raw JSON value as [rawType].
-  String read(String rawType);
+/// `gqlifyField(json, key, decoder)` reading response key [key] as [type].
+String _decodeField(String key, ValueType type) {
+  final (expr, isConst) = _decoder(type);
+  final constant = isConst && expr.contains('(') ? 'const ' : '';
+  return 'gqlifyField(json, ${dartString(key)}, $constant$expr)';
 }
 
-final class _FieldReader extends _Reader {
-  _FieldReader(this.key, this.owner);
-
-  final String key;
-  final String owner;
-
-  @override
-  String read(String rawType) =>
-      'gqlifyRead<$rawType>(json, ${dartString(key)}, ${dartString(owner)})';
+/// A decoder expression for [type] (see `GqlifyDecoder` in the runtime) and
+/// whether it is a constant expression.
+(String, bool) _decoder(ValueType type) {
+  final (String base, bool isConst) = switch (type) {
+    ScalarValue(:final mapping) => _scalarDecoder(mapping),
+    EnumValue(:final model) => ('GqlifyEnum(${model.dartName}.fromJson)', true),
+    ObjectValue(:final dartName) => ('GqlifyObject($dartName.fromJson)', true),
+    ListValue(:final item) => () {
+      final (inner, innerConst) = _decoder(item);
+      return ('GqlifyList($inner)', innerConst);
+    }(),
+    InputObjectValue() => throw StateError('Input objects are never decoded'),
+  };
+  return type.nullable ? ('GqlifyNullable($base)', isConst) : (base, isConst);
 }
 
-final class _ItemReader extends _Reader {
-  _ItemReader(this.variable, this.location);
-
-  final String variable;
-  final String location;
-
-  @override
-  String read(String rawType) =>
-      'gqlifyCast<$rawType>($variable, ${dartString(location)})';
-}
-
-String _location(_Reader reader) => switch (reader) {
-  _FieldReader(:final owner, :final key) => '$owner.$key[]',
-  _ItemReader(:final location) => '$location[]',
-};
-
-/// Expression decoding the value supplied by [reader] as [type].
-String _decode(_Reader reader, ValueType type, int depth) {
-  final String readType;
-  final String Function(String raw) convert;
-  switch (type) {
-    case ScalarValue(:final mapping):
-      readType = mapping.jsonType.readType;
-      final toDouble = mapping.jsonType == ScalarJsonType.double_;
-      final fromJson = mapping.fromJson;
-      if (!toDouble && fromJson == null) {
-        return reader.read('$readType${type.nullable ? '?' : ''}');
-      }
-      convert = (raw) {
-        final value = toDouble ? '$raw.toDouble()' : raw;
-        return fromJson == null ? value : '$fromJson($value)';
-      };
-    case EnumValue(:final model):
-      readType = 'String';
-      convert = (raw) => '${model.dartName}.fromJson($raw)';
-    case ObjectValue(:final dartName):
-      readType = 'Map<String, Object?>';
-      convert = (raw) => '$dartName.fromJson($raw)';
-    case ListValue(:final item):
-      readType = 'List<Object?>';
-      final e = 'e$depth';
-      final element = _decode(
-        _ItemReader(e, _location(reader)),
-        item,
-        depth + 1,
-      );
-      convert = (raw) => '[for (final $e in $raw) $element]';
-    case InputObjectValue():
-      throw StateError('Input objects are never decoded');
+(String, bool) _scalarDecoder(ScalarMapping mapping) {
+  final fromJson = mapping.fromJson;
+  if (fromJson == null) {
+    return (
+      switch (mapping.jsonType) {
+        ScalarJsonType.string => 'gqlifyString',
+        ScalarJsonType.int_ => 'gqlifyInt',
+        ScalarJsonType.double_ => 'gqlifyDouble',
+        ScalarJsonType.num_ => 'gqlifyNum',
+        ScalarJsonType.bool_ => 'gqlifyBool',
+        ScalarJsonType.map => 'gqlifyJsonObject',
+        ScalarJsonType.list => 'gqlifyJsonList',
+        ScalarJsonType.object => 'gqlifyJson',
+      },
+      true,
+    );
   }
-  if (!type.nullable) return convert(reader.read(readType));
-  final v = 'v$depth';
-  return 'switch (${reader.read('$readType?')}) '
-      '{ null => null, final $v => ${convert(v)} }';
+  final name = dartString(mapping.dartType);
+  // `from_json` is user code (any expression), so it is never assumed to be
+  // a constant.
+  if (mapping.jsonType == ScalarJsonType.double_) {
+    return (
+      'GqlifyConvert<num, ${mapping.dartType}>((v) => $fromJson(v.toDouble()), $name)',
+      false,
+    );
+  }
+  return (
+    'GqlifyConvert<${mapping.jsonType.readType}, ${mapping.dartType}>($fromJson, $name)',
+    false,
+  );
 }
 
 /// Expression encoding [expr] of [type] as JSON.

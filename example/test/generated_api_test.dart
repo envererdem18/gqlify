@@ -176,7 +176,7 @@ void main() {
         isA<GqlifyDecodingException>().having(
           (e) => e.message,
           'message',
-          contains('GetProductProduct.name'),
+          contains('Missing required field product.name'),
         ),
       ),
     );
@@ -197,7 +197,7 @@ void main() {
         isA<GqlifyDecodingException>().having(
           (e) => e.message,
           'message',
-          contains('GetProductProduct.categories[]'),
+          contains('Expected object at product.categories[0], got int'),
         ),
       ),
     );

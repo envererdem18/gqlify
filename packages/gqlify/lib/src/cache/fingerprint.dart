@@ -17,13 +17,19 @@ String sha256Text(String text) => sha256Hex(utf8.encode(text));
 /// It covers the full source of `package:gqlify` (not just its version, so
 /// that local edits during development invalidate caches), the resolved
 /// versions of the packages that shape output (`gql`, `dart_style`,
-/// `analyzer`) and the Dart SDK version. Returns `null` if this cannot be
-/// determined, in which case caching is disabled.
+/// `analyzer`) and the Dart SDK version.
+///
+/// In an AOT-compiled executable (`dart compile exe`), packages cannot be
+/// resolved; the executable itself then contains all generator code, so its
+/// digest is the fingerprint. Returns `null` if neither works, in which case
+/// caching is disabled.
 Future<String?> generatorFingerprint() async {
   final gqlify = await Isolate.resolvePackageUri(
     Uri.parse('package:gqlify/gqlify.dart'),
   );
-  if (gqlify == null || gqlify.scheme != 'file') return null;
+  if (gqlify == null || gqlify.scheme != 'file') {
+    return _executableFingerprint();
+  }
   final libDir = Directory(p.dirname(gqlify.toFilePath()));
   final files =
       libDir
@@ -60,4 +66,17 @@ Future<String?> _packageVersion(String package) async {
     multiLine: true,
   ).firstMatch(pubspec.readAsStringSync())?.group(1);
   return version == null ? null : '$version@$root';
+}
+
+/// Digest of the running executable if it is a self-contained AOT binary
+/// (not the `dart` VM, which runs code it does not contain).
+String? _executableFingerprint() {
+  final executable = File(Platform.resolvedExecutable);
+  final name = p.basenameWithoutExtension(executable.path);
+  if (name == 'dart' || name == 'dartaotruntime' || !executable.existsSync()) {
+    return null;
+  }
+  return sha256Text(
+    'gqlify-aot-fingerprint-1\n${sha256Hex(executable.readAsBytesSync())}',
+  );
 }

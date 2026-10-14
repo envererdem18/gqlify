@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:path/path.dart' as p;
 
@@ -64,12 +65,8 @@ final class OutputPlan {
 
   static bool _sameContent(File file, String content) {
     final expected = utf8.encode(content);
-    final actual = file.readAsBytesSync();
-    if (actual.length != expected.length) return false;
-    for (var i = 0; i < actual.length; i++) {
-      if (actual[i] != expected[i]) return false;
-    }
-    return true;
+    if (file.lengthSync() != expected.length) return false;
+    return sameBytes(file.readAsBytesSync(), expected);
   }
 
   /// Writes created/changed outputs and deletes stale ones. Unchanged files
@@ -120,4 +117,25 @@ void writeAtomically(String path, String content) {
     if (temp.existsSync()) temp.deleteSync();
     rethrow;
   }
+}
+
+/// Whether [a] and [b] hold the same bytes; compares 8 bytes at a time.
+bool sameBytes(Uint8List a, Uint8List b) {
+  if (a.length != b.length) return false;
+  final words = a.length ~/ 8;
+  if (words > 0 && a.offsetInBytes % 8 == 0 && b.offsetInBytes % 8 == 0) {
+    final wa = a.buffer.asUint64List(a.offsetInBytes, words);
+    final wb = b.buffer.asUint64List(b.offsetInBytes, words);
+    for (var i = 0; i < words; i++) {
+      if (wa[i] != wb[i]) return false;
+    }
+  } else {
+    for (var i = 0; i < words * 8; i++) {
+      if (a[i] != b[i]) return false;
+    }
+  }
+  for (var i = words * 8; i < a.length; i++) {
+    if (a[i] != b[i]) return false;
+  }
+  return true;
 }

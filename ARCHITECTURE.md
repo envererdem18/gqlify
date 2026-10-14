@@ -1,7 +1,7 @@
 # gqlify architecture
 
 This document records how gqlify is structured and why. It is updated as each
-milestone lands. **Current state: Milestone D (build_runner support).**
+milestone lands. **Current state: Milestone E (optimization and release hardening); all milestones complete, pre-release.**
 
 ## Packages
 
@@ -65,6 +65,12 @@ documents, and unused fragments.
 
 ### Schema
 
+- **Legacy SDL:** `implements A, B` and `implements A B` (pre-2018 syntax,
+  still used by Magento's schema) are rewritten in place to `implements A&B`
+  before parsing (`schema/legacy_sdl.dart`). Each separator becomes a single
+  `&`, so positions in diagnostics are unchanged. Strings, block strings and
+  comments are never modified. `package:gql` only parses the current
+  syntax.
 - **SDL:** one or more `.graphql`/`.gql` files, merged in configured order
   (type extensions supported).
 - **Introspection:** a single `.json` file containing an introspection result
@@ -354,10 +360,24 @@ scalars:
 
 ### Nullability and decoding
 
-Decoding is eager and validated. A missing non-null field, a wrong JSON type
-or a missing `__typename` throws `GqlifyDecodingException` with a location
-such as `GetProductProduct.categories[]`. It never fails lazily or coerces a
-value.
+Decoding is eager and validated: it never fails lazily or coerces a value.
+
+Generated `fromJson` code reads every field as
+`gqlifyField(json, 'key', decoder)`. The decoder is a small, usually `const`,
+composable runtime object (`GqlifyList(GqlifyNullable(GqlifyObject(X.fromJson)))`,
+`GqlifyEnum(E.fromJson)`, `gqlifyDouble`, …).
+
+- **Error paths.** A failure (missing non-null field, wrong JSON type,
+  missing `__typename`, failing custom scalar conversion) is a
+  `GqlifyDecodeError`. Path segments are added while it propagates, so the
+  happy path does no bookkeeping. The client turns it into a
+  `GqlifyDecodingException` whose message carries the response path, like
+  GraphQL errors do: `Expected String at product.categories[2].name, got int`.
+- **History.** Milestone E introduced this design, replacing inline casts
+  that repeated the class name in every field read. It made generated code
+  about 10% smaller and formatting about 18% faster on the large benchmark
+  fixture, and the messages are more useful. The old helpers remain in the
+  runtime for previously generated code.
 
 ### Errors
 
@@ -554,6 +574,54 @@ The cache is an optimization only. It lives in `.dart_tool/gqlify/`
      `<sha256 of content>\n<content>`, so truncated or corrupted artifacts
      are detected and ignored.
 
+### Parallel formatting
+
+`GqlifyEngine.generateAsync` formats libraries on several isolates. Buckets
+are balanced by size. Each library is formatted independently by the same
+pure function, so results are identical to sequential formatting
+(`parallel_format_test.dart` compares them with 2, 3 and 8 workers).
+
+Scaling is limited because isolates share one heap and `dart_style`
+allocates heavily. Two measurements on the large fixture (8 logical CPUs):
+
+In-process (JIT, warm; measured before the decoder change below, which made
+formatting about 18% faster):
+
+| Isolates | Formatting time | Speed-up | Peak memory |
+| --- | --- | --- | --- |
+| 1 | 22.0 s | — | 1.0 GiB |
+| 2 | 14.3 s | 1.5x | 1.0 GiB |
+| 4 | 12.2 s | 1.8x | 1.1 GiB |
+| 8 | 14.0 s | slower | 3.3 GiB |
+
+Cold CLI run (`generate`, wall time and peak RSS):
+
+| Isolates | JIT (`dart run gqlify`) | AOT executable |
+| --- | --- | --- |
+| 1 | 19.7 s, 364 MiB | 16.5 s, 217 MiB |
+| 2 | 14.2 s, 435 MiB | 12.2 s, 285 MiB |
+| 4 | 12.6 s, 505 MiB | 12.9–14.1 s, 2.7–2.9 GiB |
+
+The default is therefore `min(2, CPUs)`:
+
+- AOT is fastest at 2, and 4 uses about ten times the memory.
+- Under JIT, 4 is only 12% faster.
+
+`--jobs` overrides the default. Inputs under 256 KiB are formatted
+sequentially, because isolate start-up would cost more than it saves.
+
+### Avoiding redundant work after an edit (measured)
+
+Profiling a one-document edit on the large fixture removed two avoidable
+costs:
+
+- Hashing every output on disk to build the (unrequested) explanation:
+  410 ms → 4 ms. Only rewritten outputs are hashed now.
+- Re-hashing every output for the manifest: 500 ms → 3 ms. Formatting
+  artifacts already store their content digest. The memo hands it over,
+  keyed by the identity of the returned string, so a digest can only
+  describe that exact content.
+
 ### Why the dependency graph is not part of invalidation
 
 The engine reports, per output, which documents can affect it
@@ -586,9 +654,14 @@ The fingerprint (`cache/fingerprint.dart`) is the SHA-256 of:
 - the resolved versions and locations of `gql`, `dart_style` and `analyzer`
 - the Dart SDK version
 
-If it cannot be determined, for example in an AOT build without package
-resolution, caching is disabled and reported as such. This is never a
-silent hit.
+An AOT-compiled CLI (`dart compile exe` of `package:gqlify/cli.dart`) cannot
+resolve packages at runtime, but the executable itself contains all generator
+code. The fingerprint is then the digest of the executable.
+`aot_integration_test.dart` checks that such a binary generates identical
+files and gets warm hits.
+
+If neither is possible, caching is disabled and reported as such. This is
+never a silent hit.
 
 ### Crash safety and concurrency
 
@@ -711,8 +784,16 @@ phase (discovery, hashing, scan, engine phases, write, verify, cache).
   line and column information.
 - **Output scan cost:** the ownership scan walks the whole package (except
   `build/`, `.dart_tool/` and hidden directories) on every run, so that
-  stale outputs are found even without a cache. This may be slow in very
-  large repositories; Milestone E will measure it.
+  stale outputs are found even without a cache. It measured 4–50 ms on the
+  benchmark fixtures. Packages with very large unrelated trees (for example
+  vendored native code under `ios/` or `android/`) pay for walking them.
+- **Generated code size:** typed per-selection classes are large for deep
+  selections. The large synthetic fixture produces about 45 MiB of Dart for
+  1,000 operations; formatting it dominates cold runs.
+- **Rebuilding after an edit:** IR building and emission still run for
+  every library (about 1 s on the large fixture). Skipping unchanged
+  libraries using the dependency graph is possible, but not implemented; it
+  would need differential tests proving it equivalent.
 - **Artifact pruning:** formatting artifacts are pruned to those of the last
   successful run, so undoing an edit reformats once.
 - **Unverified on this machine:** Windows file locking and path handling are

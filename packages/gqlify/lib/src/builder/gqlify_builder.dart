@@ -11,6 +11,7 @@ import '../config.dart';
 import '../diagnostics.dart';
 import '../emit/formatter.dart';
 import '../engine.dart';
+import '../runtime_version.dart';
 import '../source.dart';
 
 /// `build_runner` adapter: one build step per `.graphql`/`.gql`/`.json`
@@ -154,7 +155,7 @@ final class GqlifyBuilder implements Builder {
     final results = await step.fetchResource(_results);
     final result = await results.putIfAbsent(
       key,
-      () => Future.sync(() => GqlifyEngine().generate(input, memo: _memo)),
+      () => GqlifyEngine().generateAsync(input, memo: _memo),
     );
 
     // Each diagnostic is reported by exactly one step: the one whose input
@@ -167,6 +168,12 @@ final class GqlifyBuilder implements Builder {
     }
 
     _report(result.diagnostics, owned: owned);
+    if (inputPath == schemaOwner) {
+      final warning = checkRuntimeVersion(
+        await _readOptional(step, 'pubspec.lock'),
+      );
+      if (warning != null) log.warning(warning.toString());
+    }
     if (result.hasErrors) {
       if (!result.diagnostics.any((d) => d.isError && owned(d)) &&
           inputPath == schemaOwner) {

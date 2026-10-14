@@ -298,14 +298,11 @@ final class ProductDetailsData {
 
   factory ProductDetailsData.fromJson(Map<String, Object?> json) =>
       ProductDetailsData(
-        product: switch (gqlifyRead<Map<String, Object?>?>(
+        product: gqlifyField(
           json,
           'product',
-          'ProductDetailsData',
-        )) {
-          null => null,
-          final v0 => ProductDetailsProduct.fromJson(v0),
-        },
+          const GqlifyNullable(GqlifyObject(ProductDetailsProduct.fromJson)),
+        ),
       );
 
   final ProductDetailsProduct? product;
@@ -339,62 +336,56 @@ final class ProductDetailsProduct implements ProductCard {
     required this.owner,
   });
 
-  factory ProductDetailsProduct.fromJson(Map<String, Object?> json) =>
-      ProductDetailsProduct(
-        id: gqlifyRead<String>(json, 'id', 'ProductDetailsProduct'),
-        name: gqlifyRead<String>(json, 'name', 'ProductDetailsProduct'),
-        status: ProductStatus.fromJson(
-          gqlifyRead<String>(json, 'status', 'ProductDetailsProduct'),
-        ),
-        price: switch (gqlifyRead<Map<String, Object?>?>(
-          json,
-          'price',
-          'ProductDetailsProduct',
-        )) {
-          null => null,
-          final v0 => ProductDetailsProductPrice.fromJson(v0),
-        },
-        createdAt: DateTime.parse(
-          gqlifyRead<String>(json, 'createdAt', 'ProductDetailsProduct'),
-        ),
-        updatedAt: switch (gqlifyRead<String?>(
-          json,
-          'updatedAt',
-          'ProductDetailsProduct',
-        )) {
-          null => null,
-          final v0 => DateTime.parse(v0),
-        },
-        legacyCode: gqlifyRead<String?>(
-          json,
-          'legacyCode',
-          'ProductDetailsProduct',
-        ),
-        usd: switch (gqlifyRead<Map<String, Object?>?>(
-          json,
-          'usd',
-          'ProductDetailsProduct',
-        )) {
-          null => null,
-          final v0 => ProductDetailsProductUsd.fromJson(v0),
-        },
-        localPrice: switch (gqlifyRead<Map<String, Object?>?>(
-          json,
-          'localPrice',
-          'ProductDetailsProduct',
-        )) {
-          null => null,
-          final v0 => ProductDetailsProductLocalPrice.fromJson(v0),
-        },
-        owner: switch (gqlifyRead<Map<String, Object?>?>(
-          json,
-          'owner',
-          'ProductDetailsProduct',
-        )) {
-          null => null,
-          final v0 => ProductDetailsProductOwner.fromJson(v0),
-        },
-      );
+  factory ProductDetailsProduct.fromJson(
+    Map<String, Object?> json,
+  ) => ProductDetailsProduct(
+    id: gqlifyField(json, 'id', gqlifyString),
+    name: gqlifyField(json, 'name', gqlifyString),
+    status: gqlifyField(
+      json,
+      'status',
+      const GqlifyEnum(ProductStatus.fromJson),
+    ),
+    price: gqlifyField(
+      json,
+      'price',
+      const GqlifyNullable(GqlifyObject(ProductDetailsProductPrice.fromJson)),
+    ),
+    createdAt: gqlifyField(
+      json,
+      'createdAt',
+      GqlifyConvert<String, DateTime>(DateTime.parse, 'DateTime'),
+    ),
+    updatedAt: gqlifyField(
+      json,
+      'updatedAt',
+      GqlifyNullable(
+        GqlifyConvert<String, DateTime>(DateTime.parse, 'DateTime'),
+      ),
+    ),
+    legacyCode: gqlifyField(
+      json,
+      'legacyCode',
+      const GqlifyNullable(gqlifyString),
+    ),
+    usd: gqlifyField(
+      json,
+      'usd',
+      const GqlifyNullable(GqlifyObject(ProductDetailsProductUsd.fromJson)),
+    ),
+    localPrice: gqlifyField(
+      json,
+      'localPrice',
+      const GqlifyNullable(
+        GqlifyObject(ProductDetailsProductLocalPrice.fromJson),
+      ),
+    ),
+    owner: gqlifyField(
+      json,
+      'owner',
+      const GqlifyNullable(GqlifyObject(ProductDetailsProductOwner.fromJson)),
+    ),
+  );
 
   final String id;
 
@@ -478,13 +469,11 @@ final class ProductDetailsProductPrice
 
   factory ProductDetailsProductPrice.fromJson(Map<String, Object?> json) =>
       ProductDetailsProductPrice(
-        amount: gqlifyRead<num>(
+        amount: gqlifyField(json, 'amount', gqlifyDouble),
+        currency: gqlifyField(
           json,
-          'amount',
-          'ProductDetailsProductPrice',
-        ).toDouble(),
-        currency: Currency.fromJson(
-          gqlifyRead<String>(json, 'currency', 'ProductDetailsProductPrice'),
+          'currency',
+          const GqlifyEnum(Currency.fromJson),
         ),
       );
 
@@ -518,11 +507,7 @@ final class ProductDetailsProductUsd {
 
   factory ProductDetailsProductUsd.fromJson(Map<String, Object?> json) =>
       ProductDetailsProductUsd(
-        amount: gqlifyRead<num>(
-          json,
-          'amount',
-          'ProductDetailsProductUsd',
-        ).toDouble(),
+        amount: gqlifyField(json, 'amount', gqlifyDouble),
       );
 
   final double amount;
@@ -550,17 +535,11 @@ final class ProductDetailsProductLocalPrice {
 
   factory ProductDetailsProductLocalPrice.fromJson(Map<String, Object?> json) =>
       ProductDetailsProductLocalPrice(
-        amount: gqlifyRead<num>(
+        amount: gqlifyField(json, 'amount', gqlifyDouble),
+        currency: gqlifyField(
           json,
-          'amount',
-          'ProductDetailsProductLocalPrice',
-        ).toDouble(),
-        currency: Currency.fromJson(
-          gqlifyRead<String>(
-            json,
-            'currency',
-            'ProductDetailsProductLocalPrice',
-          ),
+          'currency',
+          const GqlifyEnum(Currency.fromJson),
         ),
       );
 
@@ -594,7 +573,7 @@ final class ProductDetailsProductOwner {
 
   factory ProductDetailsProductOwner.fromJson(Map<String, Object?> json) =>
       ProductDetailsProductOwner(
-        email: gqlifyRead<String>(json, 'email', 'ProductDetailsProductOwner'),
+        email: gqlifyField(json, 'email', gqlifyString),
       );
 
   final String email;
@@ -619,19 +598,11 @@ final class ProductListData {
 
   factory ProductListData.fromJson(Map<String, Object?> json) =>
       ProductListData(
-        products: [
-          for (final e0 in gqlifyRead<List<Object?>>(
-            json,
-            'products',
-            'ProductListData',
-          ))
-            ProductListProducts.fromJson(
-              gqlifyCast<Map<String, Object?>>(
-                e0,
-                'ProductListData.products[]',
-              ),
-            ),
-        ],
+        products: gqlifyField(
+          json,
+          'products',
+          const GqlifyList(GqlifyObject(ProductListProducts.fromJson)),
+        ),
       );
 
   final List<ProductListProducts> products;
@@ -664,32 +635,23 @@ final class ProductListProducts implements ProductCard {
 
   factory ProductListProducts.fromJson(Map<String, Object?> json) =>
       ProductListProducts(
-        id: gqlifyRead<String>(json, 'id', 'ProductListProducts'),
-        name: gqlifyRead<String>(json, 'name', 'ProductListProducts'),
-        status: ProductStatus.fromJson(
-          gqlifyRead<String>(json, 'status', 'ProductListProducts'),
+        id: gqlifyField(json, 'id', gqlifyString),
+        name: gqlifyField(json, 'name', gqlifyString),
+        status: gqlifyField(
+          json,
+          'status',
+          const GqlifyEnum(ProductStatus.fromJson),
         ),
-        price: switch (gqlifyRead<Map<String, Object?>?>(
+        price: gqlifyField(
           json,
           'price',
-          'ProductListProducts',
-        )) {
-          null => null,
-          final v0 => ProductListProductsPrice.fromJson(v0),
-        },
-        related: [
-          for (final e0 in gqlifyRead<List<Object?>>(
-            json,
-            'related',
-            'ProductListProducts',
-          ))
-            ProductListProductsRelated.fromJson(
-              gqlifyCast<Map<String, Object?>>(
-                e0,
-                'ProductListProducts.related[]',
-              ),
-            ),
-        ],
+          const GqlifyNullable(GqlifyObject(ProductListProductsPrice.fromJson)),
+        ),
+        related: gqlifyField(
+          json,
+          'related',
+          const GqlifyList(GqlifyObject(ProductListProductsRelated.fromJson)),
+        ),
       );
 
   final String id;
@@ -738,13 +700,11 @@ final class ProductListProductsPrice implements ProductCardPrice, MoneyFields {
 
   factory ProductListProductsPrice.fromJson(Map<String, Object?> json) =>
       ProductListProductsPrice(
-        amount: gqlifyRead<num>(
+        amount: gqlifyField(json, 'amount', gqlifyDouble),
+        currency: gqlifyField(
           json,
-          'amount',
-          'ProductListProductsPrice',
-        ).toDouble(),
-        currency: Currency.fromJson(
-          gqlifyRead<String>(json, 'currency', 'ProductListProductsPrice'),
+          'currency',
+          const GqlifyEnum(Currency.fromJson),
         ),
       );
 
@@ -777,9 +737,7 @@ final class ProductListProductsRelated {
   const ProductListProductsRelated({required this.id});
 
   factory ProductListProductsRelated.fromJson(Map<String, Object?> json) =>
-      ProductListProductsRelated(
-        id: gqlifyRead<String>(json, 'id', 'ProductListProductsRelated'),
-      );
+      ProductListProductsRelated(id: gqlifyField(json, 'id', gqlifyString));
 
   final String id;
 
@@ -802,12 +760,11 @@ final class SearchData {
   const SearchData({required this.search});
 
   factory SearchData.fromJson(Map<String, Object?> json) => SearchData(
-    search: [
-      for (final e0 in gqlifyRead<List<Object?>>(json, 'search', 'SearchData'))
-        SearchSearch.fromJson(
-          gqlifyCast<Map<String, Object?>>(e0, 'SearchData.search[]'),
-        ),
-    ],
+    search: gqlifyField(
+      json,
+      'search',
+      const GqlifyList(GqlifyObject(SearchSearch.fromJson)),
+    ),
   );
 
   final List<SearchSearch> search;
@@ -833,7 +790,7 @@ sealed class SearchSearch {
   const SearchSearch();
 
   factory SearchSearch.fromJson(Map<String, Object?> json) =>
-      switch (gqlifyRead<String>(json, '__typename', 'SearchSearch')) {
+      switch (gqlifyField(json, '__typename', gqlifyString)) {
         'Category' => SearchSearch$Category.fromJson(json),
         'Product' => SearchSearch$Product.fromJson(json),
         'User' => SearchSearch$User.fromJson(json),
@@ -851,7 +808,7 @@ final class SearchSearch$Other extends SearchSearch {
 
   factory SearchSearch$Other.fromJson(Map<String, Object?> json) =>
       SearchSearch$Other(
-        typename: gqlifyRead<String>(json, '__typename', 'SearchSearch\$Other'),
+        typename: gqlifyField(json, '__typename', gqlifyString),
       );
 
   final String typename;
@@ -876,12 +833,8 @@ final class SearchSearch$Category extends SearchSearch {
 
   factory SearchSearch$Category.fromJson(Map<String, Object?> json) =>
       SearchSearch$Category(
-        typename: gqlifyRead<String>(
-          json,
-          '__typename',
-          'SearchSearch\$Category',
-        ),
-        name: gqlifyRead<String>(json, 'name', 'SearchSearch\$Category'),
+        typename: gqlifyField(json, '__typename', gqlifyString),
+        name: gqlifyField(json, 'name', gqlifyString),
       );
 
   final String typename;
@@ -917,24 +870,21 @@ final class SearchSearch$Product extends SearchSearch implements ProductCard {
 
   factory SearchSearch$Product.fromJson(Map<String, Object?> json) =>
       SearchSearch$Product(
-        typename: gqlifyRead<String>(
+        typename: gqlifyField(json, '__typename', gqlifyString),
+        name: gqlifyField(json, 'name', gqlifyString),
+        id: gqlifyField(json, 'id', gqlifyString),
+        status: gqlifyField(
           json,
-          '__typename',
-          'SearchSearch\$Product',
+          'status',
+          const GqlifyEnum(ProductStatus.fromJson),
         ),
-        name: gqlifyRead<String>(json, 'name', 'SearchSearch\$Product'),
-        id: gqlifyRead<String>(json, 'id', 'SearchSearch\$Product'),
-        status: ProductStatus.fromJson(
-          gqlifyRead<String>(json, 'status', 'SearchSearch\$Product'),
-        ),
-        price: switch (gqlifyRead<Map<String, Object?>?>(
+        price: gqlifyField(
           json,
           'price',
-          'SearchSearch\$Product',
-        )) {
-          null => null,
-          final v0 => SearchSearch$ProductPrice.fromJson(v0),
-        },
+          const GqlifyNullable(
+            GqlifyObject(SearchSearch$ProductPrice.fromJson),
+          ),
+        ),
       );
 
   final String typename;
@@ -982,13 +932,11 @@ final class SearchSearch$ProductPrice implements ProductCardPrice, MoneyFields {
 
   factory SearchSearch$ProductPrice.fromJson(Map<String, Object?> json) =>
       SearchSearch$ProductPrice(
-        amount: gqlifyRead<num>(
+        amount: gqlifyField(json, 'amount', gqlifyDouble),
+        currency: gqlifyField(
           json,
-          'amount',
-          'SearchSearch\$ProductPrice',
-        ).toDouble(),
-        currency: Currency.fromJson(
-          gqlifyRead<String>(json, 'currency', 'SearchSearch\$ProductPrice'),
+          'currency',
+          const GqlifyEnum(Currency.fromJson),
         ),
       );
 
@@ -1026,9 +974,9 @@ final class SearchSearch$User extends SearchSearch {
 
   factory SearchSearch$User.fromJson(Map<String, Object?> json) =>
       SearchSearch$User(
-        typename: gqlifyRead<String>(json, '__typename', 'SearchSearch\$User'),
-        id: gqlifyRead<String>(json, 'id', 'SearchSearch\$User'),
-        email: gqlifyRead<String>(json, 'email', 'SearchSearch\$User'),
+        typename: gqlifyField(json, '__typename', gqlifyString),
+        id: gqlifyField(json, 'id', gqlifyString),
+        email: gqlifyField(json, 'email', gqlifyString),
       );
 
   final String typename;
@@ -1064,14 +1012,11 @@ final class GetNodeData {
   const GetNodeData({required this.node});
 
   factory GetNodeData.fromJson(Map<String, Object?> json) => GetNodeData(
-    node: switch (gqlifyRead<Map<String, Object?>?>(
+    node: gqlifyField(
       json,
       'node',
-      'GetNodeData',
-    )) {
-      null => null,
-      final v0 => GetNodeNode.fromJson(v0),
-    },
+      const GqlifyNullable(GqlifyObject(GetNodeNode.fromJson)),
+    ),
   );
 
   final GetNodeNode? node;
@@ -1094,7 +1039,7 @@ sealed class GetNodeNode implements NodeSummary {
   const GetNodeNode();
 
   factory GetNodeNode.fromJson(Map<String, Object?> json) =>
-      switch (gqlifyRead<String>(json, '__typename', 'GetNodeNode')) {
+      switch (gqlifyField(json, '__typename', gqlifyString)) {
         'Product' => GetNodeNode$Product.fromJson(json),
         'User' => GetNodeNode$User.fromJson(json),
         _ => GetNodeNode$Other.fromJson(json),
@@ -1113,8 +1058,8 @@ final class GetNodeNode$Other extends GetNodeNode {
 
   factory GetNodeNode$Other.fromJson(Map<String, Object?> json) =>
       GetNodeNode$Other(
-        typename: gqlifyRead<String>(json, '__typename', 'GetNodeNode\$Other'),
-        id: gqlifyRead<String>(json, 'id', 'GetNodeNode\$Other'),
+        typename: gqlifyField(json, '__typename', gqlifyString),
+        id: gqlifyField(json, 'id', gqlifyString),
       );
 
   final String typename;
@@ -1149,21 +1094,10 @@ final class GetNodeNode$Product extends GetNodeNode
 
   factory GetNodeNode$Product.fromJson(Map<String, Object?> json) =>
       GetNodeNode$Product(
-        typename: gqlifyRead<String>(
-          json,
-          '__typename',
-          'GetNodeNode\$Product',
-        ),
-        id: gqlifyRead<String>(json, 'id', 'GetNodeNode\$Product'),
-        name: gqlifyRead<String>(json, 'name', 'GetNodeNode\$Product'),
-        tags: [
-          for (final e0 in gqlifyRead<List<Object?>>(
-            json,
-            'tags',
-            'GetNodeNode\$Product',
-          ))
-            gqlifyCast<String>(e0, 'GetNodeNode\$Product.tags[]'),
-        ],
+        typename: gqlifyField(json, '__typename', gqlifyString),
+        id: gqlifyField(json, 'id', gqlifyString),
+        name: gqlifyField(json, 'name', gqlifyString),
+        tags: gqlifyField(json, 'tags', const GqlifyList(gqlifyString)),
       );
 
   final String typename;
@@ -1208,9 +1142,9 @@ final class GetNodeNode$User extends GetNodeNode implements NodeSummary$User {
 
   factory GetNodeNode$User.fromJson(Map<String, Object?> json) =>
       GetNodeNode$User(
-        typename: gqlifyRead<String>(json, '__typename', 'GetNodeNode\$User'),
-        id: gqlifyRead<String>(json, 'id', 'GetNodeNode\$User'),
-        email: gqlifyRead<String>(json, 'email', 'GetNodeNode\$User'),
+        typename: gqlifyField(json, '__typename', gqlifyString),
+        id: gqlifyField(json, 'id', gqlifyString),
+        email: gqlifyField(json, 'email', gqlifyString),
       );
 
   final String typename;
@@ -1247,12 +1181,10 @@ final class UpdateProductData {
 
   factory UpdateProductData.fromJson(Map<String, Object?> json) =>
       UpdateProductData(
-        updateProduct: UpdateProductUpdateProduct.fromJson(
-          gqlifyRead<Map<String, Object?>>(
-            json,
-            'updateProduct',
-            'UpdateProductData',
-          ),
+        updateProduct: gqlifyField(
+          json,
+          'updateProduct',
+          const GqlifyObject(UpdateProductUpdateProduct.fromJson),
         ),
       );
 
@@ -1283,19 +1215,20 @@ final class UpdateProductUpdateProduct implements ProductCard {
 
   factory UpdateProductUpdateProduct.fromJson(Map<String, Object?> json) =>
       UpdateProductUpdateProduct(
-        id: gqlifyRead<String>(json, 'id', 'UpdateProductUpdateProduct'),
-        name: gqlifyRead<String>(json, 'name', 'UpdateProductUpdateProduct'),
-        status: ProductStatus.fromJson(
-          gqlifyRead<String>(json, 'status', 'UpdateProductUpdateProduct'),
+        id: gqlifyField(json, 'id', gqlifyString),
+        name: gqlifyField(json, 'name', gqlifyString),
+        status: gqlifyField(
+          json,
+          'status',
+          const GqlifyEnum(ProductStatus.fromJson),
         ),
-        price: switch (gqlifyRead<Map<String, Object?>?>(
+        price: gqlifyField(
           json,
           'price',
-          'UpdateProductUpdateProduct',
-        )) {
-          null => null,
-          final v0 => UpdateProductUpdateProductPrice.fromJson(v0),
-        },
+          const GqlifyNullable(
+            GqlifyObject(UpdateProductUpdateProductPrice.fromJson),
+          ),
+        ),
       );
 
   final String id;
@@ -1340,17 +1273,11 @@ final class UpdateProductUpdateProductPrice
 
   factory UpdateProductUpdateProductPrice.fromJson(Map<String, Object?> json) =>
       UpdateProductUpdateProductPrice(
-        amount: gqlifyRead<num>(
+        amount: gqlifyField(json, 'amount', gqlifyDouble),
+        currency: gqlifyField(
           json,
-          'amount',
-          'UpdateProductUpdateProductPrice',
-        ).toDouble(),
-        currency: Currency.fromJson(
-          gqlifyRead<String>(
-            json,
-            'currency',
-            'UpdateProductUpdateProductPrice',
-          ),
+          'currency',
+          const GqlifyEnum(Currency.fromJson),
         ),
       );
 

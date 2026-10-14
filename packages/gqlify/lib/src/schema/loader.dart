@@ -5,6 +5,7 @@ import 'package:source_span/source_span.dart';
 import '../diagnostics.dart';
 import '../source.dart';
 import 'introspection.dart';
+import 'legacy_sdl.dart';
 import 'schema.dart';
 import 'sdl_builder.dart';
 
@@ -30,7 +31,10 @@ Schema? loadSchema(List<GqlifySource> sources, DiagnosticSink sink) {
     try {
       documents.add((
         source.path,
-        lang.parseString(source.content, url: source.path),
+        lang.parseString(
+          normalizeLegacyImplements(source.content),
+          url: source.path,
+        ),
       ));
     } on SourceSpanException catch (e) {
       sink.add(

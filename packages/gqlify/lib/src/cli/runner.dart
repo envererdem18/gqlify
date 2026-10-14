@@ -49,6 +49,13 @@ final class GqlifyCommandRunner extends CommandRunner<int> {
             'stdout.',
       )
       ..addOption(
+        'jobs',
+        abbr: 'j',
+        help:
+            'Isolates used to format generated code (default: up to 4). '
+            'Fewer jobs use less memory.',
+      )
+      ..addOption(
         'lock-timeout',
         defaultsTo: '120',
         help: 'Seconds to wait for another gqlify process on the same package.',
@@ -107,6 +114,7 @@ final class _Report {
     if (cacheStatus != null) 'cache': cacheStatus,
     if (notes.isNotEmpty) 'notes': notes,
     if (explain) 'explain': [for (final e in explanations) e.toJson()],
+    if (explain) 'peakRssBytes': ProcessInfo.maxRss,
     if (explain)
       'timings': {
         for (final MapEntry(:key, :value) in timings.entries)
@@ -196,9 +204,15 @@ abstract base class _GqlifyCommand extends Command<int> {
     CacheMode mode,
   ) async {
     try {
+      final jobs = globalResults?.option('jobs');
+      final concurrency = jobs == null ? null : int.tryParse(jobs);
+      if (jobs != null && (concurrency == null || concurrency < 1)) {
+        throw UsageException('--jobs must be a positive number.', usage);
+      }
       return await IncrementalGenerator(
         cli.project(globalResults),
         mode: mode,
+        concurrency: concurrency,
         io: cli.io,
         lockTimeout: _lockTimeout,
         onLockWait: _waiting,

@@ -1,4 +1,5 @@
 import 'exceptions.dart';
+import 'internal/codec.dart' show GqlifyDecodeError;
 import 'operation.dart';
 import 'request.dart';
 import 'response.dart';
@@ -72,11 +73,13 @@ GqlifyResponse<TData> decodeResponse<TData>(
   } on Object catch (e, st) {
     final failure = e is GqlifyDecodingException
         ? e
-        : GqlifyDecodingException(
-            'Failed to decode data of ${operation.operationName}: $e',
-            cause: e,
-            stackTrace: st,
-          );
+        : e is GqlifyDecodeError
+            ? GqlifyDecodingException(e.message, cause: e, stackTrace: st)
+            : GqlifyDecodingException(
+                'Failed to decode data of ${operation.operationName}: $e',
+                cause: e,
+                stackTrace: st,
+              );
     if (errors.isEmpty) throw failure;
     return GqlifyResponse(
       errors: errors,

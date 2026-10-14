@@ -17,11 +17,11 @@ await api.addToCart(cartId: cartId, sku: 'ABC123', quantity: 2);
 There are no `Options$Query$...` or `Variables$Query$...` wrappers to build, no
 `.graphql` assets read at runtime, and no query strings parsed at runtime.
 
-> **Status: early development (Milestone D of 5). Not published to pub.dev.**
-> Queries, mutations, fragments, enums, input objects, interfaces/unions,
-> custom scalars, introspection input, schema-only mode, a correctness-first
-> incremental CLI and a `build_runner` builder work end to end. Benchmarks and
-> release hardening come next. See [Supported today](#supported-today).
+> **Status: all five milestones complete; pre-release (`0.1.0-dev`), not yet
+> published to pub.dev.** Queries, mutations, fragments, enums, input objects,
+> interfaces/unions, custom scalars, introspection input, schema-only mode, a
+> correctness-first incremental CLI and a `build_runner` builder work end to
+> end. See [Supported today](#supported-today) and [BENCHMARKS.md](BENCHMARKS.md).
 
 ## Packages
 
@@ -103,6 +103,9 @@ scalars:                             # optional custom scalar mappings
 
 Unknown settings are errors, so typos never pass silently.
 
+SDL schemas may use the legacy `implements A, B` interface syntax used by some
+large schemas, for example Magento's, as well as the current `implements A & B`.
+
 ### Modes
 
 | Mode | Generates |
@@ -177,6 +180,36 @@ regenerates every affected file, and `watch` stays correct.
 - **Only one generator should own the files:** use either the CLI or
   `build_runner` for a package, not both on the same files. Their output is
   identical, but `build_runner` keeps its own record of generated outputs.
+
+### Performance
+
+- **Day-to-day runs.** Unchanged inputs are verified, not regenerated. After
+  an edit, only libraries whose generated source changed are reformatted.
+  Formatting is the dominant cost; see [BENCHMARKS.md](BENCHMARKS.md).
+- **Parallel formatting.** Large runs format libraries on 2 isolates.
+  `-j/--jobs <n>` changes this: `-j 1` uses the least memory. More jobs can
+  be slightly faster under JIT, but can use several GiB of memory (see
+  [BENCHMARKS.md](BENCHMARKS.md)).
+- **AOT executable.** On large projects, an ahead-of-time compiled CLI
+  avoids start-up and JIT warm-up on every run (edits measured 1.5x faster
+  on a 1,000-operation project and ~4.6x faster on the Magento schema, see
+  [BENCHMARKS.md](BENCHMARKS.md)):
+
+  ```dart
+  // tool/gqlify.dart
+  import 'package:gqlify/cli.dart';
+
+  Future<void> main(List<String> args) => runGqlify(args);
+  ```
+
+  ```bash
+  dart compile exe tool/gqlify.dart -o build/gqlify
+  ./build/gqlify generate
+  ```
+
+  Recompile after upgrading gqlify. The cache keys on the executable's
+  digest, so a stale executable never reuses results from a different
+  version.
 
 ### Caching
 
@@ -299,7 +332,7 @@ type, then calls `from_json`. A failing conversion surfaces as a
 | --- | --- |
 | `GraphQLResponseException` | The response has GraphQL `errors`, even with partial `data`. It carries the `errors`, the partial `data` and `extensions`. |
 | `GqlifyTransportException` | No GraphQL response was received: network error, timeout, or an HTTP error without a GraphQL body. |
-| `GqlifyDecodingException` | The response does not match the generated types: a missing non-null field, a wrong type, or a missing `__typename`. The message names the location, e.g. `GetProductProduct.categories[]`. |
+| `GqlifyDecodingException` | The response does not match the generated types: a missing non-null field, a wrong type, a missing `__typename`, or a failing custom scalar conversion. The message names the response path, like GraphQL errors do, e.g. `Expected String at product.categories[2].name, got int`. |
 
 All three extend the sealed `GqlifyException`.
 
@@ -345,7 +378,8 @@ expect(transport.requests.single.variables, {'sku': 'A'});
 | CLI `generate`, `check`, JSON reporter | ✅ |
 | Incremental cache, `--clean`, `--explain`, `cache verify/clear`, process locking, crash recovery | ✅ |
 | `build_runner` builder (`build`/`watch`), byte-identical to the CLI | ✅ |
-| Benchmarks, release hardening, pub.dev publication | Planned (Milestone E) |
+| Benchmarks (incl. the Magento 2.4 schema), parallel formatting, AOT support | ✅ |
+| pub.dev publication | Pending maintainer decision ([RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md)) |
 | Subscriptions, persisted queries | Later |
 
 ## Development

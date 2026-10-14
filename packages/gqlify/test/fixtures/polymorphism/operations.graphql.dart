@@ -230,12 +230,11 @@ final class FeedData {
   const FeedData({required this.feed});
 
   factory FeedData.fromJson(Map<String, Object?> json) => FeedData(
-    feed: [
-      for (final e0 in gqlifyRead<List<Object?>>(json, 'feed', 'FeedData'))
-        FeedFeed.fromJson(
-          gqlifyCast<Map<String, Object?>>(e0, 'FeedData.feed[]'),
-        ),
-    ],
+    feed: gqlifyField(
+      json,
+      'feed',
+      const GqlifyList(GqlifyObject(FeedFeed.fromJson)),
+    ),
   );
 
   final List<FeedFeed> feed;
@@ -261,7 +260,7 @@ sealed class FeedFeed {
   const FeedFeed();
 
   factory FeedFeed.fromJson(Map<String, Object?> json) =>
-      switch (gqlifyRead<String>(json, '__typename', 'FeedFeed')) {
+      switch (gqlifyField(json, '__typename', gqlifyString)) {
         'Image' => FeedFeed$Image.fromJson(json),
         'Text' => FeedFeed$Text.fromJson(json),
         'Video' => FeedFeed$Video.fromJson(json),
@@ -280,8 +279,8 @@ final class FeedFeed$Other extends FeedFeed {
   const FeedFeed$Other({required this.typename, required this.kind});
 
   factory FeedFeed$Other.fromJson(Map<String, Object?> json) => FeedFeed$Other(
-    typename: gqlifyRead<String>(json, '__typename', 'FeedFeed\$Other'),
-    kind: gqlifyRead<String>(json, 'kind', 'FeedFeed\$Other'),
+    typename: gqlifyField(json, '__typename', gqlifyString),
+    kind: gqlifyField(json, 'kind', gqlifyString),
   );
 
   final String typename;
@@ -314,10 +313,10 @@ final class FeedFeed$Image extends FeedFeed implements MediaFields$Image {
   });
 
   factory FeedFeed$Image.fromJson(Map<String, Object?> json) => FeedFeed$Image(
-    typename: gqlifyRead<String>(json, '__typename', 'FeedFeed\$Image'),
-    kind: gqlifyRead<String>(json, 'kind', 'FeedFeed\$Image'),
-    url: gqlifyRead<String>(json, 'url', 'FeedFeed\$Image'),
-    width: gqlifyRead<int>(json, 'width', 'FeedFeed\$Image'),
+    typename: gqlifyField(json, '__typename', gqlifyString),
+    kind: gqlifyField(json, 'kind', gqlifyString),
+    url: gqlifyField(json, 'url', gqlifyString),
+    width: gqlifyField(json, 'width', gqlifyInt),
   );
 
   final String typename;
@@ -361,9 +360,9 @@ final class FeedFeed$Text extends FeedFeed {
   });
 
   factory FeedFeed$Text.fromJson(Map<String, Object?> json) => FeedFeed$Text(
-    typename: gqlifyRead<String>(json, '__typename', 'FeedFeed\$Text'),
-    kind: gqlifyRead<String>(json, 'kind', 'FeedFeed\$Text'),
-    body: gqlifyRead<String>(json, 'body', 'FeedFeed\$Text'),
+    typename: gqlifyField(json, '__typename', gqlifyString),
+    kind: gqlifyField(json, 'kind', gqlifyString),
+    body: gqlifyField(json, 'body', gqlifyString),
   );
 
   final String typename;
@@ -403,9 +402,9 @@ final class FeedFeed$Video extends FeedFeed implements MediaFields {
   });
 
   factory FeedFeed$Video.fromJson(Map<String, Object?> json) => FeedFeed$Video(
-    typename: gqlifyRead<String>(json, '__typename', 'FeedFeed\$Video'),
-    kind: gqlifyRead<String>(json, 'kind', 'FeedFeed\$Video'),
-    url: gqlifyRead<String>(json, 'url', 'FeedFeed\$Video'),
+    typename: gqlifyField(json, '__typename', gqlifyString),
+    kind: gqlifyField(json, 'kind', gqlifyString),
+    url: gqlifyField(json, 'url', gqlifyString),
   );
 
   final String typename;
@@ -441,14 +440,11 @@ final class NodeByIdData {
   const NodeByIdData({required this.node});
 
   factory NodeByIdData.fromJson(Map<String, Object?> json) => NodeByIdData(
-    node: switch (gqlifyRead<Map<String, Object?>?>(
+    node: gqlifyField(
       json,
       'node',
-      'NodeByIdData',
-    )) {
-      null => null,
-      final v0 => NodeByIdNode.fromJson(v0),
-    },
+      const GqlifyNullable(GqlifyObject(NodeByIdNode.fromJson)),
+    ),
   );
 
   final NodeByIdNode? node;
@@ -471,7 +467,7 @@ sealed class NodeByIdNode {
   const NodeByIdNode();
 
   factory NodeByIdNode.fromJson(Map<String, Object?> json) =>
-      switch (gqlifyRead<String>(json, '__typename', 'NodeByIdNode')) {
+      switch (gqlifyField(json, '__typename', gqlifyString)) {
         'Image' => NodeByIdNode$Image.fromJson(json),
         'Text' => NodeByIdNode$Text.fromJson(json),
         'Video' => NodeByIdNode$Video.fromJson(json),
@@ -491,8 +487,8 @@ final class NodeByIdNode$Other extends NodeByIdNode {
 
   factory NodeByIdNode$Other.fromJson(Map<String, Object?> json) =>
       NodeByIdNode$Other(
-        typename: gqlifyRead<String>(json, '__typename', 'NodeByIdNode\$Other'),
-        id: gqlifyRead<String>(json, 'id', 'NodeByIdNode\$Other'),
+        typename: gqlifyField(json, '__typename', gqlifyString),
+        id: gqlifyField(json, 'id', gqlifyString),
       );
 
   final String typename;
@@ -527,10 +523,10 @@ final class NodeByIdNode$Image extends NodeByIdNode
 
   factory NodeByIdNode$Image.fromJson(Map<String, Object?> json) =>
       NodeByIdNode$Image(
-        typename: gqlifyRead<String>(json, '__typename', 'NodeByIdNode\$Image'),
-        id: gqlifyRead<String>(json, 'id', 'NodeByIdNode\$Image'),
-        url: gqlifyRead<String>(json, 'url', 'NodeByIdNode\$Image'),
-        width: gqlifyRead<int>(json, 'width', 'NodeByIdNode\$Image'),
+        typename: gqlifyField(json, '__typename', gqlifyString),
+        id: gqlifyField(json, 'id', gqlifyString),
+        url: gqlifyField(json, 'url', gqlifyString),
+        width: gqlifyField(json, 'width', gqlifyInt),
       );
 
   final String typename;
@@ -575,9 +571,9 @@ final class NodeByIdNode$Text extends NodeByIdNode {
 
   factory NodeByIdNode$Text.fromJson(Map<String, Object?> json) =>
       NodeByIdNode$Text(
-        typename: gqlifyRead<String>(json, '__typename', 'NodeByIdNode\$Text'),
-        id: gqlifyRead<String>(json, 'id', 'NodeByIdNode\$Text'),
-        body: gqlifyRead<String?>(json, 'body', 'NodeByIdNode\$Text'),
+        typename: gqlifyField(json, '__typename', gqlifyString),
+        id: gqlifyField(json, 'id', gqlifyString),
+        body: gqlifyField(json, 'body', const GqlifyNullable(gqlifyString)),
       );
 
   final String typename;
@@ -618,9 +614,9 @@ final class NodeByIdNode$Video extends NodeByIdNode implements MediaFields {
 
   factory NodeByIdNode$Video.fromJson(Map<String, Object?> json) =>
       NodeByIdNode$Video(
-        typename: gqlifyRead<String>(json, '__typename', 'NodeByIdNode\$Video'),
-        id: gqlifyRead<String>(json, 'id', 'NodeByIdNode\$Video'),
-        url: gqlifyRead<String>(json, 'url', 'NodeByIdNode\$Video'),
+        typename: gqlifyField(json, '__typename', gqlifyString),
+        id: gqlifyField(json, 'id', gqlifyString),
+        url: gqlifyField(json, 'url', gqlifyString),
       );
 
   final String typename;
@@ -656,16 +652,11 @@ final class MediaListData {
   const MediaListData({required this.media});
 
   factory MediaListData.fromJson(Map<String, Object?> json) => MediaListData(
-    media: [
-      for (final e0 in gqlifyRead<List<Object?>>(
-        json,
-        'media',
-        'MediaListData',
-      ))
-        MediaListMedia.fromJson(
-          gqlifyCast<Map<String, Object?>>(e0, 'MediaListData.media[]'),
-        ),
-    ],
+    media: gqlifyField(
+      json,
+      'media',
+      const GqlifyList(GqlifyObject(MediaListMedia.fromJson)),
+    ),
   );
 
   final List<MediaListMedia> media;
@@ -691,7 +682,7 @@ sealed class MediaListMedia {
   const MediaListMedia();
 
   factory MediaListMedia.fromJson(Map<String, Object?> json) =>
-      switch (gqlifyRead<String>(json, '__typename', 'MediaListMedia')) {
+      switch (gqlifyField(json, '__typename', gqlifyString)) {
         'Video' => MediaListMedia$Video.fromJson(json),
         _ => MediaListMedia$Other.fromJson(json),
       };
@@ -715,13 +706,9 @@ final class MediaListMedia$Other extends MediaListMedia {
 
   factory MediaListMedia$Other.fromJson(Map<String, Object?> json) =>
       MediaListMedia$Other(
-        typename: gqlifyRead<String>(
-          json,
-          '__typename',
-          'MediaListMedia\$Other',
-        ),
-        id: gqlifyRead<String>(json, 'id', 'MediaListMedia\$Other'),
-        url: gqlifyRead<String>(json, 'url', 'MediaListMedia\$Other'),
+        typename: gqlifyField(json, '__typename', gqlifyString),
+        id: gqlifyField(json, 'id', gqlifyString),
+        url: gqlifyField(json, 'url', gqlifyString),
       );
 
   final String typename;
@@ -763,18 +750,10 @@ final class MediaListMedia$Video extends MediaListMedia {
 
   factory MediaListMedia$Video.fromJson(Map<String, Object?> json) =>
       MediaListMedia$Video(
-        typename: gqlifyRead<String>(
-          json,
-          '__typename',
-          'MediaListMedia\$Video',
-        ),
-        id: gqlifyRead<String>(json, 'id', 'MediaListMedia\$Video'),
-        url: gqlifyRead<String>(json, 'url', 'MediaListMedia\$Video'),
-        duration: gqlifyRead<num>(
-          json,
-          'duration',
-          'MediaListMedia\$Video',
-        ).toDouble(),
+        typename: gqlifyField(json, '__typename', gqlifyString),
+        id: gqlifyField(json, 'id', gqlifyString),
+        url: gqlifyField(json, 'url', gqlifyString),
+        duration: gqlifyField(json, 'duration', gqlifyDouble),
       );
 
   final String typename;
@@ -814,14 +793,11 @@ final class PageByIdData {
   const PageByIdData({required this.page});
 
   factory PageByIdData.fromJson(Map<String, Object?> json) => PageByIdData(
-    page: switch (gqlifyRead<Map<String, Object?>?>(
+    page: gqlifyField(
       json,
       'page',
-      'PageByIdData',
-    )) {
-      null => null,
-      final v0 => PageByIdPage.fromJson(v0),
-    },
+      const GqlifyNullable(GqlifyObject(PageByIdPage.fromJson)),
+    ),
   );
 
   final PageByIdPage? page;
@@ -848,18 +824,13 @@ final class PageByIdPage implements PageFields {
   });
 
   factory PageByIdPage.fromJson(Map<String, Object?> json) => PageByIdPage(
-    id: gqlifyRead<String>(json, 'id', 'PageByIdPage'),
-    title: gqlifyRead<String>(json, 'title', 'PageByIdPage'),
-    blocks: [
-      for (final e0 in gqlifyRead<List<Object?>>(
-        json,
-        'blocks',
-        'PageByIdPage',
-      ))
-        PageByIdPageBlocks.fromJson(
-          gqlifyCast<Map<String, Object?>>(e0, 'PageByIdPage.blocks[]'),
-        ),
-    ],
+    id: gqlifyField(json, 'id', gqlifyString),
+    title: gqlifyField(json, 'title', gqlifyString),
+    blocks: gqlifyField(
+      json,
+      'blocks',
+      const GqlifyList(GqlifyObject(PageByIdPageBlocks.fromJson)),
+    ),
   );
 
   final String id;
@@ -896,7 +867,7 @@ sealed class PageByIdPageBlocks implements PageFieldsBlocks {
   const PageByIdPageBlocks();
 
   factory PageByIdPageBlocks.fromJson(Map<String, Object?> json) =>
-      switch (gqlifyRead<String>(json, '__typename', 'PageByIdPageBlocks')) {
+      switch (gqlifyField(json, '__typename', gqlifyString)) {
         'Image' => PageByIdPageBlocks$Image.fromJson(json),
         'Text' => PageByIdPageBlocks$Text.fromJson(json),
         'Video' => PageByIdPageBlocks$Video.fromJson(json),
@@ -914,11 +885,7 @@ final class PageByIdPageBlocks$Other extends PageByIdPageBlocks {
 
   factory PageByIdPageBlocks$Other.fromJson(Map<String, Object?> json) =>
       PageByIdPageBlocks$Other(
-        typename: gqlifyRead<String>(
-          json,
-          '__typename',
-          'PageByIdPageBlocks\$Other',
-        ),
+        typename: gqlifyField(json, '__typename', gqlifyString),
       );
 
   final String typename;
@@ -948,13 +915,9 @@ final class PageByIdPageBlocks$Image extends PageByIdPageBlocks
 
   factory PageByIdPageBlocks$Image.fromJson(Map<String, Object?> json) =>
       PageByIdPageBlocks$Image(
-        typename: gqlifyRead<String>(
-          json,
-          '__typename',
-          'PageByIdPageBlocks\$Image',
-        ),
-        url: gqlifyRead<String>(json, 'url', 'PageByIdPageBlocks\$Image'),
-        width: gqlifyRead<int>(json, 'width', 'PageByIdPageBlocks\$Image'),
+        typename: gqlifyField(json, '__typename', gqlifyString),
+        url: gqlifyField(json, 'url', gqlifyString),
+        width: gqlifyField(json, 'width', gqlifyInt),
       );
 
   final String typename;
@@ -992,12 +955,8 @@ final class PageByIdPageBlocks$Text extends PageByIdPageBlocks
 
   factory PageByIdPageBlocks$Text.fromJson(Map<String, Object?> json) =>
       PageByIdPageBlocks$Text(
-        typename: gqlifyRead<String>(
-          json,
-          '__typename',
-          'PageByIdPageBlocks\$Text',
-        ),
-        body: gqlifyRead<String>(json, 'body', 'PageByIdPageBlocks\$Text'),
+        typename: gqlifyField(json, '__typename', gqlifyString),
+        body: gqlifyField(json, 'body', gqlifyString),
       );
 
   final String typename;
@@ -1028,12 +987,8 @@ final class PageByIdPageBlocks$Video extends PageByIdPageBlocks
 
   factory PageByIdPageBlocks$Video.fromJson(Map<String, Object?> json) =>
       PageByIdPageBlocks$Video(
-        typename: gqlifyRead<String>(
-          json,
-          '__typename',
-          'PageByIdPageBlocks\$Video',
-        ),
-        url: gqlifyRead<String>(json, 'url', 'PageByIdPageBlocks\$Video'),
+        typename: gqlifyField(json, '__typename', gqlifyString),
+        url: gqlifyField(json, 'url', gqlifyString),
       );
 
   final String typename;
@@ -1062,16 +1017,11 @@ final class TitledListData {
   const TitledListData({required this.titled});
 
   factory TitledListData.fromJson(Map<String, Object?> json) => TitledListData(
-    titled: [
-      for (final e0 in gqlifyRead<List<Object?>>(
-        json,
-        'titled',
-        'TitledListData',
-      ))
-        TitledListTitled.fromJson(
-          gqlifyCast<Map<String, Object?>>(e0, 'TitledListData.titled[]'),
-        ),
-    ],
+    titled: gqlifyField(
+      json,
+      'titled',
+      const GqlifyList(GqlifyObject(TitledListTitled.fromJson)),
+    ),
   );
 
   final List<TitledListTitled> titled;
@@ -1097,7 +1047,7 @@ sealed class TitledListTitled implements TitledFields {
   const TitledListTitled();
 
   factory TitledListTitled.fromJson(Map<String, Object?> json) =>
-      switch (gqlifyRead<String>(json, '__typename', 'TitledListTitled')) {
+      switch (gqlifyField(json, '__typename', gqlifyString)) {
         'Page' => TitledListTitled$Page.fromJson(json),
         _ => TitledListTitled$Other.fromJson(json),
       };
@@ -1117,20 +1067,13 @@ final class TitledListTitled$Other extends TitledListTitled {
 
   factory TitledListTitled$Other.fromJson(Map<String, Object?> json) =>
       TitledListTitled$Other(
-        typename: gqlifyRead<String>(
-          json,
-          '__typename',
-          'TitledListTitled\$Other',
-        ),
-        title: gqlifyRead<String?>(json, 'title', 'TitledListTitled\$Other'),
-        author: switch (gqlifyRead<Map<String, Object?>?>(
+        typename: gqlifyField(json, '__typename', gqlifyString),
+        title: gqlifyField(json, 'title', const GqlifyNullable(gqlifyString)),
+        author: gqlifyField(
           json,
           'author',
-          'TitledListTitled\$Other',
-        )) {
-          null => null,
-          final v0 => TitledListTitledAuthor.fromJson(v0),
-        },
+          const GqlifyNullable(GqlifyObject(TitledListTitledAuthor.fromJson)),
+        ),
       );
 
   final String typename;
@@ -1167,12 +1110,8 @@ final class TitledListTitledAuthor implements TitledFieldsAuthor {
 
   factory TitledListTitledAuthor.fromJson(Map<String, Object?> json) =>
       TitledListTitledAuthor(
-        typename: gqlifyRead<String>(
-          json,
-          '__typename',
-          'TitledListTitledAuthor',
-        ),
-        id: gqlifyRead<String>(json, 'id', 'TitledListTitledAuthor'),
+        typename: gqlifyField(json, '__typename', gqlifyString),
+        id: gqlifyField(json, 'id', gqlifyString),
       );
 
   final String typename;
@@ -1208,21 +1147,16 @@ final class TitledListTitled$Page extends TitledListTitled
 
   factory TitledListTitled$Page.fromJson(Map<String, Object?> json) =>
       TitledListTitled$Page(
-        typename: gqlifyRead<String>(
-          json,
-          '__typename',
-          'TitledListTitled\$Page',
-        ),
-        title: gqlifyRead<String>(json, 'title', 'TitledListTitled\$Page'),
-        author: switch (gqlifyRead<Map<String, Object?>?>(
+        typename: gqlifyField(json, '__typename', gqlifyString),
+        title: gqlifyField(json, 'title', gqlifyString),
+        author: gqlifyField(
           json,
           'author',
-          'TitledListTitled\$Page',
-        )) {
-          null => null,
-          final v0 => TitledListTitled$PageAuthor.fromJson(v0),
-        },
-        id: gqlifyRead<String>(json, 'id', 'TitledListTitled\$Page'),
+          const GqlifyNullable(
+            GqlifyObject(TitledListTitled$PageAuthor.fromJson),
+          ),
+        ),
+        id: gqlifyField(json, 'id', gqlifyString),
       );
 
   final String typename;
@@ -1264,12 +1198,8 @@ final class TitledListTitled$PageAuthor implements TitledFields$PageAuthor {
 
   factory TitledListTitled$PageAuthor.fromJson(Map<String, Object?> json) =>
       TitledListTitled$PageAuthor(
-        typename: gqlifyRead<String>(
-          json,
-          '__typename',
-          'TitledListTitled\$PageAuthor',
-        ),
-        id: gqlifyRead<String>(json, 'id', 'TitledListTitled\$PageAuthor'),
+        typename: gqlifyField(json, '__typename', gqlifyString),
+        id: gqlifyField(json, 'id', gqlifyString),
       );
 
   final String typename;

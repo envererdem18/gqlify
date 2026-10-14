@@ -127,13 +127,16 @@ final class CacheStore {
 
   /// Artifact files are `<sha256 of content>\n<content>`, so truncation or
   /// corruption is always detected.
-  static String? _readArtifact(File file) {
+  static ({String content, String digest})? _readArtifact(File file) {
     try {
       final text = utf8.decode(file.readAsBytesSync());
       final newline = text.indexOf('\n');
       if (newline != 64) return null;
       final content = text.substring(65);
-      return sha256Text(content) == text.substring(0, 64) ? content : null;
+      final digest = text.substring(0, 64);
+      return sha256Text(content) == digest
+          ? (content: content, digest: digest)
+          : null;
     } on Object {
       return null;
     }
@@ -157,6 +160,14 @@ final class CacheMemo implements FormatMemo {
   /// Keys looked up or stored during this run.
   final Set<String> used = {};
 
+  /// SHA-256 of contents returned or stored by this memo, keyed by the
+  /// identity of the string, so a digest only ever describes that exact
+  /// content.
+  final Map<String, String> _digests = Map.identity();
+
+  /// The digest of [content] if it was returned or stored by this memo.
+  String? digestOf(String content) => _digests[content];
+
   File _file(String key) => File(p.join(_store._artifacts(generator), key));
 
   @override
@@ -164,24 +175,24 @@ final class CacheMemo implements FormatMemo {
     if (ignoreExisting) return null;
     final file = _file(key);
     if (!file.existsSync()) return null;
-    final content = CacheStore._readArtifact(file);
-    if (content == null) {
+    final artifact = CacheStore._readArtifact(file);
+    if (artifact == null) {
       if (!readOnly) file.deleteSync();
       return null;
     }
     used.add(key);
-    return content;
+    _digests[artifact.content] = artifact.digest;
+    return artifact.content;
   }
 
   @override
   void store(String key, String formatted) {
+    final digest = sha256Text(formatted);
+    _digests[formatted] = digest;
     if (readOnly) return;
     used.add(key);
     try {
-      _store._writeAtomically(
-        _file(key).path,
-        '${sha256Text(formatted)}\n$formatted',
-      );
+      _store._writeAtomically(_file(key).path, '$digest\n$formatted');
     } on FileSystemException {
       // A cache write failure only costs speed.
     }

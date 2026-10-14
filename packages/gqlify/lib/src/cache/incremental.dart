@@ -5,6 +5,7 @@ import '../cli/output_sync.dart';
 import '../cli/project.dart';
 import '../diagnostics.dart';
 import '../engine.dart';
+import '../runtime_version.dart';
 import 'cache_store.dart';
 import 'fingerprint.dart';
 import 'lock.dart';
@@ -91,7 +92,11 @@ final class IncrementalGenerator {
     this.io = const OutputIO(),
     this.onLockWait,
     this.lockTimeout = const Duration(minutes: 2),
+    this.concurrency,
   }) : cache = CacheStore(project.root);
+
+  /// Formatting isolates; `null` for [GqlifyEngine.defaultConcurrency].
+  final int? concurrency;
 
   final Project project;
   final CacheMode mode;
@@ -117,6 +122,22 @@ final class IncrementalGenerator {
   }
 
   Future<IncrementalOutcome> _run() async {
+    final outcome = await _runInner();
+    final warning = checkRuntimeVersion(project.readOptional('pubspec.lock'));
+    if (warning == null) return outcome;
+    return IncrementalOutcome(
+      success: outcome.success,
+      diagnostics: [...outcome.diagnostics, warning]..sort(),
+      files: outcome.files,
+      explanations: outcome.explanations,
+      cacheStatus: outcome.cacheStatus,
+      timings: outcome.timings,
+      plan: outcome.plan,
+      outputCount: outcome.outputCount,
+    );
+  }
+
+  Future<IncrementalOutcome> _runInner() async {
     final timings = <String, Duration>{};
     final stopwatch = Stopwatch()..start();
     void lap(String phase) {
@@ -231,7 +252,11 @@ final class IncrementalGenerator {
             readOnly: !_writes,
             ignoreExisting: mode == CacheMode.clean,
           );
-    final result = GqlifyEngine().generate(input, memo: memo);
+    final result = await GqlifyEngine().generateAsync(
+      input,
+      memo: memo,
+      concurrency: concurrency,
+    );
     for (final MapEntry(:key, :value) in result.timings.entries) {
       timings['engine.$key'] = value;
     }
@@ -303,7 +328,10 @@ final class IncrementalGenerator {
       }
       plan.apply(project, result.outputs, io: io);
       lap('write');
-      final mismatch = _verifyWritten(result.outputs);
+      final mismatch = _verifyWritten(result.outputs, [
+        ...plan.created,
+        ...plan.changed,
+      ]);
       if (mismatch != null) {
         return fail([
           ...result.diagnostics,
@@ -328,7 +356,7 @@ final class IncrementalGenerator {
             outputs: {
               for (final MapEntry(:key, :value) in result.outputs.entries)
                 key: OutputRecord(
-                  sha256: sha256Text(value),
+                  sha256: memo!.digestOf(value) ?? sha256Text(value),
                   dependencies: result.dependencies[key] ?? const [],
                 ),
             },
@@ -387,12 +415,14 @@ final class IncrementalGenerator {
     return null;
   }
 
-  /// Re-reads written outputs; returns the first path that does not match.
-  String? _verifyWritten(Map<String, String> outputs) {
-    for (final MapEntry(key: path, value: content) in outputs.entries) {
+  /// Re-reads the outputs that were written; returns the first path whose
+  /// bytes do not match. Unchanged outputs were already compared byte for
+  /// byte when planning.
+  String? _verifyWritten(Map<String, String> outputs, List<String> written) {
+    for (final path in written) {
       final file = File(project.absolute(path));
       if (!file.existsSync() ||
-          sha256Hex(file.readAsBytesSync()) != sha256Text(content)) {
+          !sameBytes(file.readAsBytesSync(), utf8.encode(outputs[path]!))) {
         return path;
       }
     }
@@ -447,10 +477,9 @@ final class IncrementalGenerator {
         final file = File(project.absolute(path));
         if (!file.existsSync()) {
           reasons.add('output missing on disk');
-        } else if (plan.changed.contains(path) ||
-            plan.unchanged.contains(path)) {
-          final onDisk = sha256Hex(file.readAsBytesSync());
-          if (onDisk != record.sha256 && plan.changed.contains(path)) {
+        } else if (plan.changed.contains(path)) {
+          // Only outputs being rewritten can differ from the record.
+          if (sha256Hex(file.readAsBytesSync()) != record.sha256) {
             reasons.add('output modified on disk');
           }
         }

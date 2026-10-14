@@ -77,8 +77,10 @@ final class AddToCartData {
   const AddToCartData({required this.addToCart});
 
   factory AddToCartData.fromJson(Map<String, Object?> json) => AddToCartData(
-    addToCart: AddToCartAddToCart.fromJson(
-      gqlifyRead<Map<String, Object?>>(json, 'addToCart', 'AddToCartData'),
+    addToCart: gqlifyField(
+      json,
+      'addToCart',
+      const GqlifyObject(AddToCartAddToCart.fromJson),
     ),
   );
 
@@ -108,25 +110,13 @@ final class AddToCartAddToCart {
 
   factory AddToCartAddToCart.fromJson(Map<String, Object?> json) =>
       AddToCartAddToCart(
-        id: gqlifyRead<String>(json, 'id', 'AddToCartAddToCart'),
-        totalQuantity: gqlifyRead<num>(
+        id: gqlifyField(json, 'id', gqlifyString),
+        totalQuantity: gqlifyField(json, 'total_quantity', gqlifyDouble),
+        items: gqlifyField(
           json,
-          'total_quantity',
-          'AddToCartAddToCart',
-        ).toDouble(),
-        items: [
-          for (final e0 in gqlifyRead<List<Object?>>(
-            json,
-            'items',
-            'AddToCartAddToCart',
-          ))
-            AddToCartAddToCartItems.fromJson(
-              gqlifyCast<Map<String, Object?>>(
-                e0,
-                'AddToCartAddToCart.items[]',
-              ),
-            ),
-        ],
+          'items',
+          const GqlifyList(GqlifyObject(AddToCartAddToCartItems.fromJson)),
+        ),
       );
 
   final String id;
@@ -163,12 +153,8 @@ final class AddToCartAddToCartItems {
 
   factory AddToCartAddToCartItems.fromJson(Map<String, Object?> json) =>
       AddToCartAddToCartItems(
-        sku: gqlifyRead<String>(json, 'sku', 'AddToCartAddToCartItems'),
-        quantity: gqlifyRead<num>(
-          json,
-          'quantity',
-          'AddToCartAddToCartItems',
-        ).toDouble(),
+        sku: gqlifyField(json, 'sku', gqlifyString),
+        quantity: gqlifyField(json, 'quantity', gqlifyDouble),
       );
 
   final String sku;

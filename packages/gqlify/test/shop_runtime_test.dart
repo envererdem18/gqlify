@@ -131,7 +131,7 @@ void main() {
           isA<GqlifyDecodingException>().having(
             (e) => e.message,
             'message',
-            contains('GetNodeNode.__typename'),
+            contains('Missing required field node.__typename'),
           ),
         ),
       );

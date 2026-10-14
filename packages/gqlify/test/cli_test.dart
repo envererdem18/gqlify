@@ -200,5 +200,8 @@ void main() {
 
   test('usage errors', () async {
     expect(await run(['nope']), 64);
+    expect(await run(['-j', '0', 'generate']), 64);
+    expect(await run(['--jobs', 'x', 'generate']), 64);
+    expect(await run(['-j', '2', 'generate']), 0);
   });
 }

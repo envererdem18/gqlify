@@ -1,3 +1,20 @@
+## 0.1.0-dev.5 (unreleased)
+
+Milestone E: optimization and release hardening.
+
+- Generated `fromJson` uses composable runtime decoders; decoding errors now
+  name the response path (`product.categories[2].name`). Generated code is
+  ~10% smaller and formats ~18% faster. **Requires gqlify_runtime
+  0.1.0-dev.3.**
+- Parallel formatting on 2 isolates by default (`-j/--jobs`).
+- AOT support: `package:gqlify/cli.dart` (`runGqlify`) and caching keyed by
+  the executable's digest when packages cannot be resolved.
+- Less redundant hashing after edits (explanations, manifest digests).
+- Legacy `implements A, B` SDL syntax (e.g. Magento) is accepted.
+- `--explain` JSON reports peak RSS.
+- Benchmark harness (`benchmark/`) including the Magento 2.4 schema; package
+  metadata for pub.dev.
+
 ## 0.1.0-dev.4 (unreleased)
 
 Milestone D: build_runner support.

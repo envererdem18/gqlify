@@ -82,6 +82,8 @@ final class Project {
     );
   }
 
+  String? readOptional(String relative) => _readOptional(relative);
+
   String? _readOptional(String relative) {
     final file = File(absolute(relative));
     return file.existsSync() ? file.readAsStringSync() : null;
