@@ -3,12 +3,16 @@ import 'package:yaml/yaml.dart';
 
 import 'diagnostics.dart';
 
-/// Oldest `gqlify_runtime` providing everything this generator's output uses.
-final minimumRuntimeVersion = Version.parse('0.1.0-dev.3');
+/// `gqlify_runtime` versions this generator's output works with.
+///
+/// Policy: generator and runtime share the minor version before 1.0
+/// (gqlify 0.1.x generates code for gqlify_runtime 0.1.x), and the major
+/// version after 1.0.
+final compatibleRuntimeVersions = VersionConstraint.parse('>=0.1.0 <0.2.0');
 
-/// Warns when the consuming package resolves an older `gqlify_runtime` than
-/// generated code needs (generated code would then not compile). Shared by
-/// the CLI and the builder; reads only `pubspec.lock`.
+/// Warns when the consuming package resolves a `gqlify_runtime` outside
+/// [compatibleRuntimeVersions] (generated code might then not compile).
+/// Shared by the CLI and the builder; reads only `pubspec.lock`.
 Diagnostic? checkRuntimeVersion(String? pubspecLock) {
   if (pubspecLock == null) return null;
   Object? version;
@@ -28,13 +32,14 @@ Diagnostic? checkRuntimeVersion(String? pubspecLock) {
   } on FormatException {
     return null;
   }
-  if (resolved >= minimumRuntimeVersion) return null;
+  if (compatibleRuntimeVersions.allows(resolved)) return null;
   return Diagnostic(
     severity: Severity.warning,
     code: 'runtime-version',
     message:
-        'gqlify_runtime $resolved is older than $minimumRuntimeVersion, '
-        'which the generated code requires. Upgrade gqlify_runtime.',
+        'gqlify_runtime $resolved is not supported by this version of gqlify '
+        '(expected $compatibleRuntimeVersions). Use matching versions of '
+        'gqlify and gqlify_runtime.',
     path: 'pubspec.lock',
   );
 }

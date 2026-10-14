@@ -1,16 +1,9 @@
-## 0.1.0-dev.3 (unreleased)
+## 0.1.0
 
-- Composable decoders for generated code (`gqlifyField`, `GqlifyList`,
-  `GqlifyNullable`, `GqlifyObject`, `GqlifyEnum`, `GqlifyConvert`, scalar
-  decoders) with response-path error messages.
-- Example and pub.dev metadata.
+First release.
 
-## 0.1.0-dev.2 (unreleased)
-
-- `gqlifyDeepEquals`/`gqlifyDeepHash` support maps and sets (used by
-  generated inputs and operations).
-
-## 0.1.0-dev.1 (unreleased)
-
-- Milestone A: client base, `HttpTransport`, `MockTransport`, typed responses
-  and the sealed `GqlifyException` hierarchy.
+- Client base, `HttpTransport` (works on the VM, Flutter and the web) and
+  `MockTransport` for tests.
+- Typed responses and a small set of exceptions for GraphQL, transport and
+  decoding errors.
+- Decoders used by code generated with gqlify 0.1.x.

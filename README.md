@@ -1,397 +1,231 @@
-# gqlify
+<p align="center">
+  <img src="assets/gqlify-banner.png" alt="gqlify — GraphQL, simplified for Dart" width="480">
+</p>
 
-**GraphQL, simplified for Dart.**
+<p align="center">
+  <a href="https://pub.dev/packages/gqlify"><img src="https://img.shields.io/pub/v/gqlify.svg" alt="pub package"></a>
+  <a href="https://github.com/envererdem18/gqlify/actions/workflows/ci.yaml"><img src="https://github.com/envererdem18/gqlify/actions/workflows/ci.yaml/badge.svg" alt="CI"></a>
+  <a href="https://github.com/envererdem18/gqlify/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT license"></a>
+</p>
 
-gqlify generates a small, strongly typed Dart API from a GraphQL schema and
-your `.graphql` operations, at build time:
+---
 
-```dart
-final api = GqlifyClient(transport: HttpTransport(Uri.parse('https://shop.example/graphql')));
-
-final data = await api.getProduct(sku: 'ABC123');
-print(data.product?.name);
-
-await api.addToCart(cartId: cartId, sku: 'ABC123', quantity: 2);
-```
-
-There are no `Options$Query$...` or `Variables$Query$...` wrappers to build, no
-`.graphql` assets read at runtime, and no query strings parsed at runtime.
-
-> **Status: all five milestones complete; pre-release (`0.1.0-dev`), not yet
-> published to pub.dev.** Queries, mutations, fragments, enums, input objects,
-> interfaces/unions, custom scalars, introspection input, schema-only mode, a
-> correctness-first incremental CLI and a `build_runner` builder work end to
-> end. See [Supported today](#supported-today) and [BENCHMARKS.md](BENCHMARKS.md).
-
-## Packages
-
-| Package | Add as | Purpose |
-| --- | --- | --- |
-| [`gqlify`](packages/gqlify) | `dev_dependencies` | Generator and `gqlify` command line tool |
-| [`gqlify_runtime`](packages/gqlify_runtime) | `dependencies` | Tiny pure-Dart runtime used by generated code (works with Flutter, server and CLI apps) |
-
-## Getting started
-
-1. Add the packages. They are not on pub.dev yet; use path or git
-   dependencies for now:
-
-   ```yaml
-   dependencies:
-     gqlify_runtime: ^0.1.0
-   dev_dependencies:
-     gqlify: ^0.1.0
-   ```
-
-2. Add your schema (SDL, or an introspection `.json`) and operations:
-
-   ```graphql
-   # lib/graphql/products.graphql
-   query GetProduct($sku: ID!) {
-     product(sku: $sku) {
-       ...ProductSummary
-       categories { id name }
-     }
-   }
-
-   fragment ProductSummary on Product {
-     sku
-     name
-     price
-   }
-   ```
-
-3. Configure gqlify in a `gqlify:` section of `pubspec.yaml`:
-
-   ```yaml
-   gqlify:
-     schema: lib/graphql/schema.graphql
-   ```
-
-   A separate `gqlify.yaml` with the same settings (without the `gqlify:`
-   key) works too. Use one or the other, not both.
-
-4. Generate with the CLI or with `build_runner`. Both produce byte-identical
-   files:
-
-   ```bash
-   dart run gqlify generate        # or: dart run gqlify check (CI)
-   dart run build_runner build     # or: dart run build_runner watch
-   ```
-
-   This writes `lib/graphql/schema.graphql.dart` (client, enums, inputs) and one
-   `*.graphql.dart` library next to each operation document. Import the
-   libraries whose operations you call.
-
-## Configuration
-
-Settings go in the `gqlify:` section of `pubspec.yaml` or in `gqlify.yaml`:
-
-```yaml
-schema: lib/graphql/schema.graphql   # or a list of SDL files, or one introspection .json
-documents:                           # optional, default: lib/**.graphql and lib/**.gql
-  - lib/graphql/**.graphql
-mode: operations                     # operations | schema_only | both
-client_name: GqlifyClient            # optional
-scalars:                             # optional custom scalar mappings
-  DateTime:
-    type: DateTime
-    json_type: String                # String, int, double, num, bool, Map, List, Object
-    from_json: DateTime.parse
-    to_json: encodeDateTime          # optional
-    import: package:my_app/scalars.dart
-```
-
-Unknown settings are errors, so typos never pass silently.
-
-SDL schemas may use the legacy `implements A, B` interface syntax used by some
-large schemas, for example Magento's, as well as the current `implements A & B`.
-
-### Modes
-
-| Mode | Generates |
-| --- | --- |
-| `operations` (default) | Client, operations and fragments, plus the enums and inputs they use |
-| `schema_only` | Every enum and input object of the schema. No operations are read. |
-| `both` | Everything from `operations` plus every enum and input object |
-
-Response classes only exist for operations and fragments. A response contains
-exactly the fields you selected, so gqlify does not generate a "full" class per
-schema object type that would pretend otherwise.
-
-### Formatting
-
-Generated code is formatted to match `dart format` in your package. gqlify uses
-your `pubspec.yaml` SDK constraint and the `formatter:` section of
-`analysis_options.yaml`.
-
-## Command line
-
-| Command | What it does |
-| --- | --- |
-| `dart run gqlify generate` | Validates and generates. It writes only files whose content changed, removes outputs that are no longer produced (for example after deleting a document or switching mode), and never overwrites files it did not generate. On any error, no file is changed. |
-| `dart run gqlify generate --explain` | Also reports, for each output, why it was regenerated, reused or removed, and the time spent per phase. |
-| `dart run gqlify generate --clean` | Recomputes everything without using cached results, reconciles outputs and rebuilds the cache. It never deletes unrelated files. |
-| `dart run gqlify check` | Validates and verifies that generated files are up to date without writing anything, not even cache files. Exits with `1` otherwise. Use this in CI. |
-| `dart run gqlify cache verify` | Checks the integrity of the CLI cache. Exits with `1` if it is corrupt. |
-| `dart run gqlify cache clear` | Deletes the CLI cache. Generated files are kept. |
-| `--reporter json` | Prints one machine-readable JSON object (diagnostics, files, cache status, and with `--explain` the reasons and timings) to stdout. |
-| `-C <dir>` | Runs for the package in `<dir>`. |
-| `--lock-timeout <s>` | Sets how long to wait for another gqlify process on the same package (default 120). |
-
-### build_runner
-
-The builder is applied automatically to packages that depend on `gqlify`, and
-it runs on `lib/**.graphql`, `lib/**.gql` and `lib/**.json`:
-
-```bash
-dart run build_runner build
-dart run build_runner watch
-```
-
-`build_runner` tracks every input that can affect the output: the
-configuration, the schema, every operation and fragment document, and the
-format settings. A change to a shared fragment or to the schema therefore
-regenerates every affected file, and `watch` stays correct.
-
-- **Configuration in `pubspec.yaml` is the simplest setup.** `build_runner`
-  always sees that file. It does not see `gqlify.yaml` or
-  `analysis_options.yaml` unless you add them to the target sources in
-  `build.yaml`:
-
-  ```yaml
-  targets:
-    $default:
-      sources:
-        include: [$package$, lib/**, pubspec.yaml, gqlify.yaml, analysis_options.yaml]
-  ```
-
-- **Inactive builder:** if your configuration lives only in an invisible
-  `gqlify.yaml`, the builder stays inactive and warns once. CLI users can
-  still run `build_runner` for other generators.
-- **Hidden formatter settings:** if `analysis_options.yaml` has `formatter:`
-  settings that the build cannot see, the builder fails with instructions
-  instead of formatting differently from the CLI.
-- **Failed builds:** if a GraphQL document has an error, `build_runner`
-  reports it and removes the generated files of that build. They come back
-  once the error is fixed. This is standard `build_runner` behavior. The CLI
-  instead leaves the previous files untouched on errors.
-- **Older `build_runner` versions** need `--delete-conflicting-outputs` once,
-  if files were previously generated by the CLI.
-- **Only one generator should own the files:** use either the CLI or
-  `build_runner` for a package, not both on the same files. Their output is
-  identical, but `build_runner` keeps its own record of generated outputs.
-
-### Performance
-
-- **Day-to-day runs.** Unchanged inputs are verified, not regenerated. After
-  an edit, only libraries whose generated source changed are reformatted.
-  Formatting is the dominant cost; see [BENCHMARKS.md](BENCHMARKS.md).
-- **Parallel formatting.** Large runs format libraries on 2 isolates.
-  `-j/--jobs <n>` changes this: `-j 1` uses the least memory. More jobs can
-  be slightly faster under JIT, but can use several GiB of memory (see
-  [BENCHMARKS.md](BENCHMARKS.md)).
-- **AOT executable.** On large projects, an ahead-of-time compiled CLI
-  avoids start-up and JIT warm-up on every run (edits measured 1.5x faster
-  on a 1,000-operation project and ~4.6x faster on the Magento schema, see
-  [BENCHMARKS.md](BENCHMARKS.md)):
-
-  ```dart
-  // tool/gqlify.dart
-  import 'package:gqlify/cli.dart';
-
-  Future<void> main(List<String> args) => runGqlify(args);
-  ```
-
-  ```bash
-  dart compile exe tool/gqlify.dart -o build/gqlify
-  ./build/gqlify generate
-  ```
-
-  Recompile after upgrading gqlify. The cache keys on the executable's
-  digest, so a stale executable never reuses results from a different
-  version.
-
-### Caching
-
-The CLI keeps a disposable cache in `.dart_tool/gqlify/`. The cache never
-changes results; deleting it only costs time:
-
-- **Nothing changed:** if no input changed since the last successful run and
-  every generated file still has the recorded content, gqlify verifies this
-  and exits without regenerating.
-- **Anything changed:** gqlify validates every document against the schema
-  again (a cache can never hide an error). It then reuses previously
-  formatted code for libraries whose generated source is identical, which
-  is the expensive part.
-- **On doubt:** a corrupt, outdated or inconsistent cache is ignored and
-  rebuilt, and `--explain` reports why.
-- **Safe under failure:** concurrent `gqlify` processes on one package wait
-  for each other, and interrupted runs repair themselves on the next run.
-
-`.dart_tool/` should not be committed.
-
-Diagnostics use the format
-`lib/graphql/products.graphql:3:5: error[unknown-field]: Cannot query field "nme" on type "Product".`
-Warnings, for example `warning[deprecated-field]`, do not fail generation.
-
-## Using the generated API
+If you've used GraphQL code generation in Dart, you've probably written
+something like this at some point:
 
 ```dart
-import 'package:gqlify_runtime/gqlify_runtime.dart';
-import 'graphql/schema.graphql.dart';
-import 'graphql/products.graphql.dart';
-
-final api = GqlifyClient(
-  transport: HttpTransport(
-    Uri.parse('https://shop.example/graphql'),
-    headersBuilder: (_) async => {'authorization': 'Bearer ${await token()}'},
-    timeout: const Duration(seconds: 15),
+final result = await client.query$FetchPerson(
+  Options$Query$FetchPerson(
+    variables: Variables$Query$FetchPerson(id: '1'),
   ),
 );
-
-// Short form: returns typed data, throws on any GraphQL error.
-final data = await api.getProduct(sku: 'ABC123');
-
-// Full form: errors, partial data, extensions, per-request options.
-final response = await api.execute(
-  const GetProductQuery(sku: 'ABC123'),
-  options: const GqlifyRequestOptions(headers: {'x-store': 'de'}),
-);
-if (response.hasErrors) print(response.errors);
 ```
 
-### Fragments
+It works. It just doesn't read like Dart.
 
-Every fragment becomes an `abstract interface class`. Every generated class
-that spreads the fragment implements it, so you can write code against the
-fragment once:
+With gqlify, the same call looks like this:
 
 ```dart
-Widget productTile(ProductSummary p) => Text('${p.name} – ${p.price}');
-
-productTile(data.product!);                 // from GetProduct
-productTile(searchData.results.first);      // from SearchProducts
+final data = await api.fetchPerson(id: '1');
+print(data.person?.name);
 ```
 
-Fragments can live in any document and spread other fragments. Nested
-selections and type conditions are typed too.
+You write `.graphql` files. gqlify checks them against your schema and
+generates a small, fully typed Dart API at build time: no strings parsed at
+runtime and no wrappers to build. It works for Flutter, server and CLI apps
+alike.
 
-### Interfaces and unions
+## Quick start
 
-Fields of interface or union type decode by `__typename` into a sealed class
-hierarchy. gqlify adds `__typename` to the request automatically. Every
-hierarchy has an `$Other` class for types without their own selection,
-including types added to the server later, so switches are exhaustive and
-decoding never breaks on schema growth:
+**1. Add the packages**
 
-```dart
-for (final hit in (await api.search(text: 'mug')).search) {
-  switch (hit) {
-    SearchSearch$Product() => productTile(hit),
-    SearchSearch$Category(:final name) => print('Category $name'),
-    SearchSearch$Other(:final typename) => print('Unhandled $typename'),
+```yaml
+dependencies:
+  gqlify_runtime: ^0.1.0
+
+dev_dependencies:
+  gqlify: ^0.1.0
+```
+
+**2. Point gqlify at your schema** (in `pubspec.yaml`)
+
+```yaml
+gqlify:
+  schema: lib/graphql/schema.graphql
+```
+
+**3. Write a query**
+
+```graphql
+# lib/graphql/person.graphql
+query FetchPerson($id: ID!) {
+  person(id: $id) {
+    name
+    email
   }
 }
 ```
 
-### Enums
+**4. Generate**
 
-```dart
-product.stockStatus == StockStatus.inStock;   // IN_STOCK -> inStock
-StockStatus.inStock.value;                    // 'IN_STOCK'
+```bash
+dart run gqlify generate
 ```
 
-Values unknown to the client decode to `$unknown` instead of failing.
-Encoding `$unknown` throws, because it cannot be sent to the server.
-
-### Input objects, variables and `null`
-
-Optional fields and variables are **omitted** when you leave them `null`, so
-server defaults apply. To send an explicit `null`, use `withNull`:
+**5. Use it**
 
 ```dart
-const filter = ProductFilter(search: 'mug', stockStatus: StockStatus.inStock);
-await api.searchProducts(filter: filter);                     // {search, stock_status}
-await api.searchProducts(filter: filter.withNull(minPrice: true)); // + "min_price": null
-await api.execute(const SearchProductsQuery().withNull(filter: true)); // "filter": null
+import 'package:gqlify_runtime/gqlify_runtime.dart';
+import 'graphql/schema.graphql.dart';
+import 'graphql/person.graphql.dart';
+
+final api = GqlifyClient(
+  transport: HttpTransport(Uri.parse('https://api.example.com/graphql')),
+);
+
+final data = await api.fetchPerson(id: '1');
 ```
 
-`@oneOf` inputs get one constructor per field, for example
-`Lookup.sku('MUG')`.
+That's it. Each `.graphql` file gets a `.graphql.dart` file next to it, and
+your schema gets one for the client, enums and input types.
 
-### Custom scalars
+## What you get
 
-Unmapped custom scalars are passed through as JSON (`Object`). Map them in
-`gqlify.yaml` (see [Configuration](#configuration)). gqlify checks the wire
-type, then calls `from_json`. A failing conversion surfaces as a
-`GqlifyDecodingException`.
+- **Plain method calls.** Every operation becomes a method on your client,
+  with named parameters for its variables.
+- **Real types.** Nullability comes straight from your schema, and fields
+  under `@skip`/`@include` are nullable because they may be missing.
+- **Fragments you can reuse.** Every fragment becomes an interface, so one
+  widget can take data from any query that spreads it.
 
-### Errors
+  ```dart
+  Widget personTile(PersonSummary p) => Text(p.name);
+  ```
 
-| Exception | When |
-| --- | --- |
-| `GraphQLResponseException` | The response has GraphQL `errors`, even with partial `data`. It carries the `errors`, the partial `data` and `extensions`. |
-| `GqlifyTransportException` | No GraphQL response was received: network error, timeout, or an HTTP error without a GraphQL body. |
-| `GqlifyDecodingException` | The response does not match the generated types: a missing non-null field, a wrong type, a missing `__typename`, or a failing custom scalar conversion. The message names the response path, like GraphQL errors do, e.g. `Expected String at product.categories[2].name, got int`. |
+- **Unions and interfaces as sealed classes.** Switch over them and the
+  compiler checks you covered every case. Types the server adds later land
+  in an `$Other` case instead of crashing your app.
 
-All three extend the sealed `GqlifyException`.
+  ```dart
+  // query Find { results { ... on Product { sku } ... on Category { name } } }
+  switch (result) {
+    FindResults$Product(:final sku) => showProduct(sku),
+    FindResults$Category(:final name) => showCategory(name),
+    FindResults$Other() => const SizedBox.shrink(),
+  }
+  ```
 
-### Types and naming
+- **Enums and input objects.** Leaving an optional input field out and
+  sending an explicit `null` are different things in GraphQL, and gqlify
+  keeps them apart: `ProductFilter(search: 'mug').withNull(minPrice: true)`.
+- **Custom scalars.** Map `DateTime`, `Decimal` or anything else to your own
+  Dart types.
+- **Honest errors.** GraphQL errors, network failures and malformed
+  responses each get their own exception. Partial data never pretends to be
+  a success, and decoding errors tell you exactly where things went wrong:
+  `Expected String at person.friends[2].name, got int`.
 
-- `Int` → `int`, `Float` → `double`, `String`/`ID` → `String`, `Boolean` →
-  `bool`.
-- Nullable GraphQL types are nullable in Dart. Fields under `@skip`/`@include`
-  are nullable because they may be absent.
-- Field names become `lowerCamelCase` (`stock_quantity` → `stockQuantity`).
-  Aliases become field names.
-- Response classes, inputs and operations have value equality and
-  `toString`. Response classes also have `toJson`/`fromJson`.
-- Generated names never depend on other files. Name clashes are reported as
-  errors with a suggestion (usually an alias) instead of being renamed.
+## CLI or build_runner? Either.
 
-### Testing without a server
+Use whichever fits your workflow. Both produce exactly the same files.
+
+```bash
+dart run gqlify generate       # fast, with a smart cache
+dart run gqlify check          # for CI: fails if generated code is stale
+
+dart run build_runner build    # or `watch`, if you already use build_runner
+```
+
+The CLI keeps a small cache in `.dart_tool/`:
+
+- **Nothing changed:** it verifies the generated files and is done in about
+  a second, or a fraction of that with an
+  [AOT build](https://github.com/envererdem18/gqlify/blob/main/BENCHMARKS.md).
+- **Something changed:** everything is validated again, but code that comes
+  out the same isn't reformatted or rewritten.
+
+Deleting the cache only makes the next run slower; it never changes the
+result.
+
+## Testing without a server
 
 ```dart
 import 'package:gqlify_runtime/testing.dart';
 
-final transport = MockTransport((request) => {
-  'data': {'product': {'sku': 'A', 'name': 'Mug', 'price': 9.5}},
-});
-final api = GqlifyClient(transport: transport);
-expect((await api.getProduct(sku: 'A')).product?.name, 'Mug');
-expect(transport.requests.single.variables, {'sku': 'A'});
+final api = GqlifyClient(
+  transport: MockTransport((request) => {
+    'data': {
+      'person': {'name': 'Ada', 'email': 'ada@example.com'},
+    },
+  }),
+);
+
+expect((await api.fetchPerson(id: '1')).person?.name, 'Ada');
 ```
 
-## Supported today
+## Configuration
 
-| Feature | Status |
+A few useful settings; all of them are optional except `schema`:
+
+```yaml
+gqlify:
+  schema: lib/graphql/schema.graphql   # SDL file(s) or an introspection .json
+  documents: [lib/graphql/**.graphql]  # where your queries live
+  mode: operations                     # or: schema_only, both
+  client_name: GqlifyClient
+  scalars:
+    DateTime:
+      type: DateTime
+      json_type: String
+      from_json: DateTime.parse
+```
+
+Prefer a separate file? Put the same settings in `gqlify.yaml`, without the
+`gqlify:` key.
+
+## Good to know
+
+- Subscriptions aren't supported yet. Queries and mutations are.
+- Every operation needs a name: gqlify uses it to name your Dart API.
+- Use matching versions of `gqlify` and `gqlify_runtime` (0.1.x with 0.1.x).
+  gqlify warns you if they drift apart.
+
+## Want the details?
+
+- [ARCHITECTURE.md](https://github.com/envererdem18/gqlify/blob/main/ARCHITECTURE.md):
+  how it all works, including validation, naming, the cache and the
+  build_runner integration.
+- [BENCHMARKS.md](https://github.com/envererdem18/gqlify/blob/main/BENCHMARKS.md):
+  measured numbers, including the full Magento schema.
+- [example/](https://github.com/envererdem18/gqlify/tree/main/example): a
+  small app you can run.
+
+Found a bug or have an idea?
+[Open an issue](https://github.com/envererdem18/gqlify/issues). It's very
+welcome.
+
+## Working on gqlify
+
+This repository is a Dart workspace with three packages:
+
+| Path | What it is |
 | --- | --- |
-| Queries, mutations, variables (defaults, lists, non-null), aliases, nested selections | ✅ |
-| Fragments (named, inline, nested, across files) as interfaces | ✅ |
-| Interfaces and unions, sealed classes decoded by `__typename`, unknown-type fallback | ✅ |
-| Enums (with unknown-value fallback), input objects, `@oneOf`, explicit `null` vs omitted | ✅ |
-| Custom scalar mappings | ✅ |
-| `@skip`/`@include` (optional fields), deprecation annotations and warnings | ✅ |
-| SDL (multiple files, extensions) and introspection JSON schemas | ✅ |
-| Modes `operations`, `schema_only`, `both` | ✅ |
-| Full executable-document validation against the schema | ✅ |
-| CLI `generate`, `check`, JSON reporter | ✅ |
-| Incremental cache, `--clean`, `--explain`, `cache verify/clear`, process locking, crash recovery | ✅ |
-| `build_runner` builder (`build`/`watch`), byte-identical to the CLI | ✅ |
-| Benchmarks (incl. the Magento 2.4 schema), parallel formatting, AOT support | ✅ |
-| pub.dev publication | Pending maintainer decision ([RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md)) |
-| Subscriptions, persisted queries | Later |
-
-## Development
+| [`packages/gqlify`](packages/gqlify) | The generator: engine, CLI and build_runner builder |
+| [`packages/gqlify_runtime`](packages/gqlify_runtime) | The runtime used by generated code |
+| [`example`](example) | A small app using both |
 
 ```bash
-dart pub get                     # resolves the whole workspace
-dart analyze                     # strict analysis, including generated goldens
-dart test packages/gqlify packages/gqlify_runtime example   # includes real build_runner runs
-dart test packages/gqlify -x integration                      # skip the slow build_runner tests
+dart pub get                                  # whole workspace
+dart analyze                                  # strict, includes generated goldens
+dart test packages/gqlify -x integration      # quick
+dart test packages/gqlify                     # everything, incl. real build_runner runs
 (cd example && dart run gqlify check)
-GQLIFY_UPDATE_GOLDENS=1 dart test packages/gqlify/test/golden_test.dart  # refresh goldens
-GQLIFY_FUZZ_SEEDS=1-200 dart test packages/gqlify/test/cache_fuzz_test.dart  # longer fuzzing
 ```
 
-See [ARCHITECTURE.md](ARCHITECTURE.md) for the design.
+[RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md) covers releases, and
+[IMPLEMENTATION_SUMMARY.md](IMPLEMENTATION_SUMMARY.md) gives the big picture:
+what's done, what's missing and the known risks.
+
+## License
+
+[MIT](LICENSE)

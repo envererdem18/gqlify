@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="560" height="200" viewBox="0 0 560 200" role="img" aria-labelledby="title">
+  <title id="title">gqlify — GraphQL, simplified for Dart</title>
+  <defs>
+    <linearGradient id="mark" x1="40" y1="24" x2="216" y2="232" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#E535AB"/>
+      <stop offset="0.55" stop-color="#7B4DE0"/>
+      <stop offset="1" stop-color="#0FA3E8"/>
+    </linearGradient>
+    <linearGradient id="word" x1="208" y1="0" x2="436" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#E535AB"/>
+      <stop offset="0.5" stop-color="#7B4DE0"/>
+      <stop offset="1" stop-color="#0FA3E8"/>
+    </linearGradient>
+  </defs>
+  <g transform="translate(12 12) scale(0.6875)">
+    <polygon points="128,30 213,79 213,177 128,226 43,177 43,79"
+             fill="url(#mark)" stroke="url(#mark)" stroke-width="28" stroke-linejoin="round"/>
+    <g fill="none" stroke="#FFFFFF" stroke-width="15" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M100 78 C84 78 84 86 84 98 L84 112 C84 122 79 128 68 128 C79 128 84 134 84 144 L84 158 C84 170 84 178 100 178"/>
+      <path d="M156 78 C172 78 172 86 172 98 L172 112 C172 122 177 128 188 128 C177 128 172 134 172 144 L172 158 C172 170 172 178 156 178"/>
+    </g>
+    <path d="M128 100 C130.5 120 136 125.5 156 128 C136 130.5 130.5 136 128 156 C125.5 136 120 130.5 100 128 C120 125.5 125.5 120 128 100 Z" fill="#FFFFFF"/>
+  </g>
+  <text x="208" y="112" fill="url(#word)"
+        font-family="Inter, 'SF Pro Display', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif"
+        font-size="88" font-weight="800" letter-spacing="-2">gqlify</text>
+  <text x="212" y="152" fill="#8A8FA3"
+        font-family="Inter, 'SF Pro Text', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif"
+        font-size="24" font-weight="500">GraphQL, simplified for Dart.</text>
+</svg>

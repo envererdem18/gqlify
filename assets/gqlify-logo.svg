@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256" role="img" aria-labelledby="title">
+  <title id="title">gqlify</title>
+  <defs>
+    <linearGradient id="gqlify-gradient" x1="40" y1="24" x2="216" y2="232" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#E535AB"/>
+      <stop offset="0.55" stop-color="#7B4DE0"/>
+      <stop offset="1" stop-color="#0FA3E8"/>
+    </linearGradient>
+  </defs>
+  <!-- Rounded hexagon: a nod to GraphQL -->
+  <polygon points="128,30 213,79 213,177 128,226 43,177 43,79"
+           fill="url(#gqlify-gradient)" stroke="url(#gqlify-gradient)"
+           stroke-width="28" stroke-linejoin="round"/>
+  <!-- { } : a query -->
+  <g fill="none" stroke="#FFFFFF" stroke-width="15" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M100 78 C84 78 84 86 84 98 L84 112 C84 122 79 128 68 128 C79 128 84 134 84 144 L84 158 C84 170 84 178 100 178"/>
+    <path d="M156 78 C172 78 172 86 172 98 L172 112 C172 122 177 128 188 128 C177 128 172 134 172 144 L172 158 C172 170 172 178 156 178"/>
+  </g>
+  <!-- ✦ : the "-ify", generated for you -->
+  <path d="M128 100 C130.5 120 136 125.5 156 128 C136 130.5 130.5 136 128 156 C125.5 136 120 130.5 100 128 C120 125.5 125.5 120 128 100 Z" fill="#FFFFFF"/>
+</svg>

@@ -11,10 +11,11 @@ packages:
 ''';
 
 void main() {
-  test('warns about runtimes older than the generator needs', () {
+  test('accepts the same minor version and warns otherwise', () {
+    expect(checkRuntimeVersion(lock('0.1.0')), isNull);
+    expect(checkRuntimeVersion(lock('0.1.7')), isNull);
     expect(checkRuntimeVersion(lock('0.1.0-dev.2'))?.code, 'runtime-version');
-    expect(checkRuntimeVersion(lock('$minimumRuntimeVersion')), isNull);
-    expect(checkRuntimeVersion(lock('0.2.0')), isNull);
+    expect(checkRuntimeVersion(lock('0.2.0'))?.code, 'runtime-version');
     expect(checkRuntimeVersion('packages: {}'), isNull);
     expect(checkRuntimeVersion(null), isNull);
     expect(checkRuntimeVersion(': not yaml :'), isNull);

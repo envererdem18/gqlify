@@ -3,19 +3,21 @@
 Publishing to pub.dev is irreversible: a version can be retracted, but never
 deleted. Only the maintainer publishes, after going through this list.
 
-## Before 1.0.0 (one-time decisions)
+## Decisions (2026-10-14)
 
-- [ ] **Name.** `gqlify` and `gqlify_runtime` were unused on pub.dev on
-  2026-10-14. The name is also used by
-  [`Gqlify/gqlify`](https://github.com/Gqlify/gqlify), a JavaScript GraphQL
-  framework with 177 stars and the site docs.gqlify.com, and by a 2022 npm
-  package. Decide whether that is acceptable (this is not legal advice).
-- [ ] **Version numbers.** Both packages are `0.1.0-dev.*`. Choose the first
-  public version, for example `0.1.0`.
-- [ ] **Runtime compatibility.** Generated code calls `gqlify_runtime`
-  helpers. State the supported runtime range in the `gqlify` README, for
-  example "generator 0.x requires runtime 0.x".
-- [ ] **Verified publisher.** Optionally create a pub.dev verified publisher.
+- **Name:** `gqlify` is kept. It is free on pub.dev. A JavaScript project
+  ([`Gqlify/gqlify`](https://github.com/Gqlify/gqlify)) uses the same name in
+  another ecosystem; this was considered and accepted.
+- **First version:** `0.1.0` for both packages.
+- **Publisher:** published by the maintainer's verified publisher, once CI is
+  green on Linux, macOS and Windows.
+- **Runtime compatibility:**
+  - Before 1.0, `gqlify` and `gqlify_runtime` share the minor version
+    (gqlify 0.1.x generates code for gqlify_runtime 0.1.x).
+  - After 1.0, they share the major version.
+  - The policy is enforced by the `runtime-version` warning
+    (`compatibleRuntimeVersions` in `lib/src/runtime_version.dart`).
+    Update that constraint whenever the minor or major version changes.
 
 ## Every release
 
