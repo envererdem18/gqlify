@@ -11,11 +11,20 @@
   <polygon points="128,30 213,79 213,177 128,226 43,177 43,79"
            fill="url(#gqlify-gradient)" stroke="url(#gqlify-gradient)"
            stroke-width="28" stroke-linejoin="round"/>
-  <!-- { } : a query -->
+  <!-- { } holding a nested selection: a field, its child field, a field -->
   <g fill="none" stroke="#FFFFFF" stroke-width="15" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M100 78 C84 78 84 86 84 98 L84 112 C84 122 79 128 68 128 C79 128 84 134 84 144 L84 158 C84 170 84 178 100 178"/>
-    <path d="M156 78 C172 78 172 86 172 98 L172 112 C172 122 177 128 188 128 C177 128 172 134 172 144 L172 158 C172 170 172 178 156 178"/>
+    <path d="M96 78 C80 78 80 86 80 98 L80 112 C80 122 75 128 64 128 C75 128 80 134 80 144 L80 158 C80 170 80 178 96 178"/>
+    <path d="M160 78 C176 78 176 86 176 98 L176 112 C176 122 181 128 192 128 C181 128 176 134 176 144 L176 158 C176 170 176 178 160 178"/>
   </g>
-  <!-- ✦ : the "-ify", generated for you -->
-  <path d="M128 100 C130.5 120 136 125.5 156 128 C136 130.5 130.5 136 128 156 C125.5 136 120 130.5 100 128 C120 125.5 125.5 120 128 100 Z" fill="#FFFFFF"/>
+  <path d="M104 104 V122 Q104 128 110 128 H118" fill="none" stroke="#FFFFFF" stroke-width="5" stroke-linecap="round" opacity="0.85"/>
+  <g fill="#FFFFFF">
+    <circle cx="104" cy="104" r="7.5"/>
+    <circle cx="124" cy="128" r="7.5"/>
+    <circle cx="104" cy="152" r="7.5"/>
+  </g>
+  <g fill="none" stroke="#FFFFFF" stroke-width="11" stroke-linecap="round" opacity="0.92">
+    <path d="M120 104 H150"/>
+    <path d="M140 128 H158"/>
+    <path d="M120 152 H142"/>
+  </g>
 </svg>
