@@ -47,8 +47,18 @@ final class Sandbox {
     if (file.existsSync()) file.deleteSync();
   }
 
+  /// Deletes the sandbox. On Windows, files may stay locked briefly after a
+  /// child process exits, so deletion is retried and finally left to the
+  /// OS's temp cleanup rather than failing the test.
   void dispose() {
-    if (dir.existsSync()) dir.deleteSync(recursive: true);
+    for (var attempt = 0; dir.existsSync(); attempt++) {
+      try {
+        dir.deleteSync(recursive: true);
+      } on FileSystemException {
+        if (attempt >= 20) return;
+        sleep(const Duration(milliseconds: 250));
+      }
+    }
   }
 
   /// Runs the CLI in-process and captures a [Snapshot].

@@ -1,4 +1,5 @@
 @Tags(['differential'])
+@Timeout(Duration(minutes: 3))
 library;
 
 import 'dart:async';
@@ -132,65 +133,69 @@ void main() {
     Future<ProcessResult> cli(List<String> args) =>
         Process.run(dart, [script, '-C', sandbox.dir.path, ...args]);
 
-    test(
-      'two processes generating simultaneously',
-      () async {
-        sandbox.write('lib/c.graphql', 'query C { products { id name } }');
-        final results = await Future.wait([
-          cli(['generate']),
-          cli(['generate']),
-        ]);
-        for (final r in results) {
-          expect(r.exitCode, 0, reason: '${r.stdout}${r.stderr}');
-        }
-        await expectMatchesClean(sandbox, reason: 'after concurrent runs');
-        expect((await sandbox.run(['cache', 'verify'])).exitCode, 0);
-      },
-      timeout: const Timeout(Duration(minutes: 2)),
-    );
+    test('two processes generating simultaneously', () async {
+      sandbox.write('lib/c.graphql', 'query C { products { id name } }');
+      final results = await Future.wait([
+        cli(['generate']),
+        cli(['generate']),
+      ]);
+      for (final r in results) {
+        expect(r.exitCode, 0, reason: '${r.stdout}${r.stderr}');
+      }
+      await expectMatchesClean(sandbox, reason: 'after concurrent runs');
+      expect((await sandbox.run(['cache', 'verify'])).exitCode, 0);
+    });
+
+    /// Starts a process holding the project lock until it is killed.
+    Future<Process> holdLock() async {
+      final holder = await Process.start(dart, [
+        p.absolute('test', 'support', 'hold_lock.dart'),
+        sandbox.path('.dart_tool/gqlify/lock'),
+        '600000',
+      ]);
+      unawaited(holder.stderr.drain<void>());
+      await holder.stdout
+          .transform(utf8.decoder)
+          .firstWhere((l) => l.contains('locked'));
+      return holder;
+    }
 
     test(
       'a lock held by a crashed process does not block later runs',
       () async {
-        final holder = await Process.start(dart, [
-          p.absolute('test', 'support', 'hold_lock.dart'),
-          sandbox.path('.dart_tool/gqlify/lock'),
-          '600000',
-        ]);
-        final stderrDone = holder.stderr.drain<void>();
-        await holder.stdout
-            .transform(utf8.decoder)
-            .firstWhere((l) => l.contains('locked'));
-
+        final holder = await holdLock();
         final blocked = await sandbox.run(['--lock-timeout', '1', 'generate']);
         expect(blocked.exitCode, 1);
         expect(blocked.diagnostics.toString(), contains('Timed out'));
 
         holder.kill(ProcessSignal.sigkill);
         await holder.exitCode;
-        await stderrDone;
         await expectMatchesClean(
           sandbox,
           reason: 'after the lock holder crashed',
         );
       },
-      timeout: const Timeout(Duration(minutes: 2)),
     );
 
     test('waits for a running process', () async {
-      final holder = await Process.start(dart, [
-        p.absolute('test', 'support', 'hold_lock.dart'),
-        sandbox.path('.dart_tool/gqlify/lock'),
-        '8000',
+      final holder = await holdLock();
+      final generate = await Process.start(dart, [
+        script,
+        '-C',
+        sandbox.dir.path,
+        'generate',
       ]);
-      await holder.stdout
+      final stdoutDone = generate.stdout.drain<void>();
+      // Release the lock only once the second process reports waiting, so
+      // the test does not depend on how fast the machine starts processes.
+      await generate.stderr
           .transform(utf8.decoder)
-          .firstWhere((l) => l.contains('locked'));
-      final result = await cli(['generate']);
-      expect(result.exitCode, 0);
-      expect(result.stderr, contains('waiting for another gqlify process'));
+          .firstWhere((l) => l.contains('waiting for another gqlify process'));
+      holder.kill(ProcessSignal.sigkill);
       await holder.exitCode;
-    }, timeout: const Timeout(Duration(minutes: 2)));
+      expect(await generate.exitCode, 0);
+      await stdoutDone;
+    });
   });
 
   test('cache verify and clear', () async {

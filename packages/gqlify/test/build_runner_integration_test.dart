@@ -194,7 +194,13 @@ gqlify:
         });
         expect(sandbox.exists('lib/graphql/extra/users.graphql.dart'), isFalse);
       } finally {
-        watch.kill();
+        // `dart run` starts child processes (the compiled build script); on
+        // Windows killing the parent leaves them running, so kill the tree.
+        if (Platform.isWindows) {
+          await Process.run('taskkill', ['/PID', '${watch.pid}', '/T', '/F']);
+        } else {
+          watch.kill();
+        }
         await watch.exitCode;
         await changed.close();
       }

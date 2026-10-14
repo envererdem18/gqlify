@@ -6,6 +6,19 @@ on:
   pull_request:
 
 jobs:
+  # Formatting is checked with a pinned SDK: `dart format` output can change
+  # between SDK releases, and the check should not flip on its own. Bump the
+  # version deliberately (and reformat) when upgrading.
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: 3.13.5
+      - run: dart pub get
+      - run: dart format --output=none --set-exit-if-changed packages example
+
   test:
     strategy:
       fail-fast: false
@@ -19,12 +32,9 @@ jobs:
         with:
           sdk: ${{ matrix.sdk }}
       - run: dart pub get
-      - name: Format
-        if: matrix.os == 'ubuntu-latest'
-        run: dart format --output=none --set-exit-if-changed packages example
       - name: Analyze (strict, includes generated goldens)
         run: dart analyze --fatal-infos
-      - name: Test generator
+      - name: Test generator (incl. differential, concurrency and build_runner integration tests)
         run: dart test
         working-directory: packages/gqlify
       - name: Test runtime
